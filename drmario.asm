@@ -67,9 +67,9 @@ main:
     
     # Draw the initalize position of the pill
     jal random_color
-    addi $s4, $s0, 1940
+    addi $s4, $s0, 1428
     sw $s5, 0( $s4 )
-    addi $s3, $s0, 2196
+    addi $s3, $s0, 1684
     sw $s6, 0( $s3 )
     
     j game_loop
@@ -207,10 +207,10 @@ game_loop:
     # 5. Go back to Step 1
     j game_loop
 
-# Ok, so a lot of my logic is based on the idea of converting the values of (1912) which is the memory address over to a more easier and manipulatable variable.
+# Ok, so a lot of my logic is based on the idea of converting the values of (1142) which is the memory address over to a more easier and manipulatable variable.
 # For example, 1912 would convert to (0,0) on the board. 
 
-# Notice that our board is (23 x 13).
+# Notice that our board is (27 x 15) with it starting from two higher than the top left of the jar.
 # Finally, here are the keyboard inputs map to the commands.
 # A and D are the standard moving left and right
 # W is rotate
@@ -220,7 +220,7 @@ game_loop:
 # Input: $a0 = address offset (e.g., 1912, 1428, etc.)
 # Output: $v0 = X (row), $v1 = Y (column)
 addr_to_board:
-    sub $t8, $a0, 1912      # Subtract the board's top-left offset (1912)
+    sub $t8, $a0, 1140      # Subtract the board's top-left offset (1140)
     li $t9, 256             # Bytes per row (64 columns * 4 bytes per pixel)
     
     divu $t8, $t9 # Divide by bytes per row: X = quotient, remainder = column offset
@@ -237,7 +237,7 @@ board_to_addr:
     mul $t1, $a0, $t0 # $t1 = X * bytes per row
     sll $t2, $a1, 2 # $t2 = Y * 4 (bytes)
     add $t3, $t1, $t2 # $t3 = offset within the board
-    addi $v0, $t3, 1912 # Add the board's top-left offset (1912)
+    addi $v0, $t3, 1140 # Add the board's top-left offset (1912)
     
     jr $ra
     
@@ -246,7 +246,10 @@ keybord_input:
     lw $a0, 4($t0)                  # Load second word from keyboard
     beq $a0, 0x71, respond_to_Q     # Check if the key 'q' was pressed
     beq $a0, 0x77, respond_to_W     # Check if the key 'w' was pressed
+    beq $a0, 0x73, respond_to_S     # Check if the key 's' was pressed
 
+    beq $a0, 0x61, respond_to_A     # Check if the key 'a' was pressed
+    beq $a0, 0x64, respond_to_D     # Check if the key 'd' was pressed
     j update_board
     
     
@@ -255,6 +258,24 @@ respond_to_Q:
     li $v0, 10                      # Quit gracefully
     syscall
     
+# Moves Down the current pill
+respond_to_S:
+    addi $s3, $s3, 256
+    addi $s4, $s4, 256
+    j update_board
+    
+# Move left the current pill
+respond_to_A:
+    addi $s3, $s3, -4
+    addi $s4, $s4, -4
+    j update_board
+    
+# Move right the current pill
+respond_to_D:
+    addi $s3, $s3, 4
+    addi $s4, $s4, 4
+    j update_board
+
 
 # Rotates the pill
 respond_to_W:
@@ -282,5 +303,9 @@ respond_to_W:
     # If the pill is currently vertical
     rotate_h_v:
         addi $s4, $s3, 4
+        # Then we update the colour
+        addi $t2, $s5, 0
+        addi $s5, $s6, 0
+        addi $s6, $t2, 0
     finish_rotate:
     j update_board
