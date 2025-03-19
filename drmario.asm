@@ -36,7 +36,7 @@ colors: .word 0x00ff00, 0xff0000, 0x0000ff, 0x000000  # Green, Red, Blue, Black
 # State of the current board
 # Think of it as a 27x15 array.
 # If a index at a array is 
-board: .space 405 # 27 rows x 15 columns = 405
+board: .space 459 # 27 rows x 17 columns = 405
 ##############################################################################
 # Code
 ##############################################################################
@@ -69,7 +69,7 @@ main:
     
     # Instantiate the board as filled with zeros.
     la $t0, board
-    li $t1, 405       # Total bytes to initialize (27*15 = 405)
+    li $t1, 405       # Total bytes to initialize (27*17 = 459)
     li $t2, 0         # Value to store (0)
     set_zero_board:
         beqz $t1, exit_zero_board     # Exit loop when counter ($t1) reaches 0
@@ -247,7 +247,7 @@ game_loop:
 # Ok, so a lot of my logic is based on the idea of converting the values of (1142) which is the memory address over to a more easier and manipulatable variable.
 # For example, 1912 would convert to (0,0) on the board. 
 
-# Notice that our board is (27 x 15) with it starting from two higher than the top left of the jar.
+# Notice that our board is (27 x 17) with it starting from two higher than the top left of the jar.
 # Finally, here are the keyboard inputs map to the commands.
 # A and D are the standard moving left and right
 # W is rotate
@@ -270,7 +270,7 @@ addr_to_board:
 # Get the value at the index board[$a0][$a1].
 # For example board[i][0] where i >= 2 is 5 because it's the wall.
 get_val_at_board:
-    mul $t8, $a0, 15
+    mul $t8, $a0, 17
     add $t8, $t8, $a1 # Get the index in the board
     add $t8, $t8, $s1 # Get the address on the board
     lb $v0, 0 ($t8)
@@ -291,7 +291,7 @@ set_board_by_addr:
     add $t0, $v0, $zero # X position of Pill 1 on board
     add $t1, $v1, $zero # Y position of Pill 1 on board
     
-    mul $t8, $t0, 15
+    mul $t8, $t0, 17
     add $t8, $t8, $t1 # Get the index in the board
     add $t8, $t8, $s1 # Get the address on the board
     sb $a1, 0 ($t8)   # Set value at the board
@@ -370,7 +370,7 @@ respond_to_A:
     finite_no_left_movement:
     j update_board
     
-# Move left the current pill
+# Move right the current pill
 respond_to_D:
     # Check if current pill is horizontal or not
     addi $t4, $s3, 4
