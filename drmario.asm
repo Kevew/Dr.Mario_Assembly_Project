@@ -55,7 +55,7 @@ colors: .word 0x00ff00, 0xff0000, 0x0000ff, 0x000000  # Green, Red, Blue, Black
 
 # $s5 = Pill 1 Color
 # $s6 = Pill 2 Color
-
+# $s7 = Virus Color
 
 
 
@@ -253,7 +253,7 @@ keybord_input:
     j update_board
     
     
-# Exits program when callde
+# Exits program when called
 respond_to_Q:
     li $v0, 10                      # Quit gracefully
     syscall
@@ -309,3 +309,45 @@ respond_to_W:
         addi $s6, $t2, 0
     finish_rotate:
     j update_board
+
+# generate viruses in random locations with random colors
+
+generate_viruses:
+    la $t0, viruses      # load address of array of viruses
+    li $t1, 4            # generate 4 viruses (creates a counter to decrement from)
+    li $t2, 8            # x bounds 1-8
+    li $t3, 16           # y bounds 1-16
+
+# load $s7 with a random color
+virus_color:
+    # make 4 random x, y coords Min: , Max: 
+    li $v0, 42           # syscall to generate rand number
+    li $a0, 0            # generator ID is 0 by default
+    li $a1, 3            # upper bound (exclusive) set to 3
+    syscall
+    la $t3, colors       # Load color array in
+    sll $a0, $a0, 2
+    add $t3, $t3, $a0    # Calculate address of new color
+    lw $s7, 0($t3) 
+    jr $ra
+
+generate_virus_loop:
+
+    # generate random x coord
+    li $v0, 42           # syscall for random number generator
+    li $a0, 0            # generator id
+    li $a1, 8            # upper bound 8 exclusive
+    syscall
+    addi $a0, $a0, 1     # shift range from 0-7 to 1-8
+    sw $a0, 0($t0)       # store x coord in first index of $t0 (array for virus)
+
+    # generate random color and store it in $s7
+    jal virus_color      # call virus_color
+    sw $s7, 8($t0)       # store color
+
+    # generate next virus in virus array
+    addi $t0, $t0, 12               # increment through 12 bytes in array to move thru (x, y, color)
+    addi $t1, $t1, -1               # decrement counter
+    bnez $t1, generate_virus_loop   # jump to generate_virus_loop if $t1 is not 0
+
+    jr $ra
