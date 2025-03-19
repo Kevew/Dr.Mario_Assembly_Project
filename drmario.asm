@@ -34,8 +34,9 @@ colors: .word 0x00ff00, 0xff0000, 0x0000ff, 0x000000  # Green, Red, Blue, Black
 # Mutable Data
 
 # State of the current board
-# Think of it as a 27x15 array.
-# If a index at a array is 
+# Think of it as a 27x17 array.
+# If a index at a array is 1, then it's a wall
+# If a index at a array is 0, then it's empty space
 board: .space 459 # 27 rows x 17 columns = 405
 ##############################################################################
 # Code
@@ -166,6 +167,11 @@ instantiate_map:
         add $t5, $s0, $t3 # If it has not, update $t5 which is where we want to draw
         sw $t7, 0( $t5 ) # Draw the pixel
         addi $t3, $t3, 4 # Move down a row
+        
+        # This section adds it to the board state
+        addi $a0, $t5, 0
+        addi $a1, $zero, 1
+        jal set_board_by_addr
         j wall_bottom
     wall_bottom_end:
 
@@ -177,6 +183,11 @@ instantiate_map:
         add $t5, $s0, $t3 # If it has not, update $t5 which is where we want to draw
         sw $t7, 0( $t5 ) # Draw the pixel
         addi $t3, $t3, 4 # Move down a row
+        
+        # This section adds it to the board state
+        addi $a0, $t5, 0
+        addi $a1, $zero, 1
+        jal set_board_by_addr
         j wall_top_left
     wall_top_left_end: 
     addi $t3, $zero, 1692 # t3 tracks the current location starting from the left
@@ -186,18 +197,42 @@ instantiate_map:
         add $t5, $s0, $t3 # If it has not, update $t5 which is where we want to draw
         sw $t7, 0( $t5 ) # Draw the pixel
         addi $t3, $t3, 4 # Move down a row
+        
+        # This section adds it to the board state
+        addi $a0, $t5, 0
+        addi $a1, $zero, 1
+        jal set_board_by_addr
         j wall_top_right
     wall_top_right_end:
     
     # Now manually draw the top part
     addi $t3, $s0, 1420
     sw $t7, 0( $t3 )
+    # This section adds it to the board state
+    addi $a0, $t3, 0
+    addi $a1, $zero, 1
+    jal set_board_by_addr
+    
     addi $t3, $s0, 1164
     sw $t7, 0( $t3 )
+    # This section adds it to the board state
+    addi $a0, $t3, 0
+    addi $a1, $zero, 1
+    jal set_board_by_addr
+    
     addi $t3, $s0, 1436
     sw $t7, 0( $t3 )
+    # This section adds it to the board state
+    addi $a0, $t3, 0
+    addi $a1, $zero, 1
+    jal set_board_by_addr
+    
     addi $t3, $s0, 1180
     sw $t7, 0( $t3 ) 
+    # This section adds it to the board state
+    addi $a0, $t3, 0
+    addi $a1, $zero, 1
+    jal set_board_by_addr
     
     lw $ra, 0($sp)           # Restore original return address
     addi $sp, $sp, 4         # Free stack space
@@ -341,8 +376,26 @@ respond_to_Q:
     
 # Moves Down the current pill
 respond_to_S:
-    addi $s3, $s3, 256
-    addi $s4, $s4, 256
+    # Check if current pill is horizontal or not
+    addi $t4, $s3, 4
+    bne $s4, $t4, vertical_down_move
+        # If the pill is currently horizontal, this means we need to check the bottom of pill 1 and 2
+        addi $a0, $s3, 256
+        jal get_board_by_addr
+        bne $v0, 0, finite_no_down_movement 
+        addi $a0, $s4, 256
+        jal get_board_by_addr
+        bne $v0, 0, finite_no_down_movement 
+        j finite_down_movement
+    vertical_down_move:
+        # If the pill is currently vertical, this means we need to check the bottom of pill 1
+        addi $a0, $s3, 256
+        jal get_board_by_addr
+        bne $v0, 0, finite_no_down_movement 
+    finite_down_movement:
+        addi $s3, $s3, 256
+        addi $s4, $s4, 256
+    finite_no_down_movement:
     j update_board
     
 # Move left the current pill
