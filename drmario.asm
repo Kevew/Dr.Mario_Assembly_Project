@@ -38,9 +38,10 @@ viruses: .space 48
 # Mutable Data
 
 # State of the current board
-# Think of it as a 27x15 array.
-# If a index at a array is 
-board: .space 405 # 27 rows x 15 columns = 405
+# Think of it as a 27x17 array.
+# If a index at a array is 1, then it's a wall
+# If a index at a array is 0, then it's empty space
+board: .space 459 # 27 rows x 17 columns = 405
 ##############################################################################
 # Code
 ##############################################################################
@@ -73,7 +74,7 @@ main:
     
     # Instantiate the board as filled with zeros.
     la $t0, board
-    li $t1, 405                       # Total bytes to initialize (27*15 = 405)
+    li $t1, 405                       # Total bytes to initialize (27*17 = 459)
     li $t2, 0                         # Value to store (0)
     set_zero_board:
         beqz $t1, exit_zero_board     # Exit loop when counter ($t1) reaches 0
@@ -173,6 +174,11 @@ instantiate_map:
         add $t5, $s0, $t3 # If it has not, update $t5 which is where we want to draw
         sw $t7, 0( $t5 ) # Draw the pixel
         addi $t3, $t3, 4 # Move down a row
+        
+        # This section adds it to the board state
+        addi $a0, $t5, 0
+        addi $a1, $zero, 1
+        jal set_board_by_addr
         j wall_bottom
     wall_bottom_end:
 
@@ -184,6 +190,11 @@ instantiate_map:
         add $t5, $s0, $t3 # If it has not, update $t5 which is where we want to draw
         sw $t7, 0( $t5 ) # Draw the pixel
         addi $t3, $t3, 4 # Move down a row
+        
+        # This section adds it to the board state
+        addi $a0, $t5, 0
+        addi $a1, $zero, 1
+        jal set_board_by_addr
         j wall_top_left
     wall_top_left_end: 
     addi $t3, $zero, 1692 # t3 tracks the current location starting from the left
@@ -193,18 +204,42 @@ instantiate_map:
         add $t5, $s0, $t3 # If it has not, update $t5 which is where we want to draw
         sw $t7, 0( $t5 ) # Draw the pixel
         addi $t3, $t3, 4 # Move down a row
+        
+        # This section adds it to the board state
+        addi $a0, $t5, 0
+        addi $a1, $zero, 1
+        jal set_board_by_addr
         j wall_top_right
     wall_top_right_end:
     
     # Now manually draw the top part
     addi $t3, $s0, 1420
     sw $t7, 0( $t3 )
+    # This section adds it to the board state
+    addi $a0, $t3, 0
+    addi $a1, $zero, 1
+    jal set_board_by_addr
+    
     addi $t3, $s0, 1164
     sw $t7, 0( $t3 )
+    # This section adds it to the board state
+    addi $a0, $t3, 0
+    addi $a1, $zero, 1
+    jal set_board_by_addr
+    
     addi $t3, $s0, 1436
     sw $t7, 0( $t3 )
+    # This section adds it to the board state
+    addi $a0, $t3, 0
+    addi $a1, $zero, 1
+    jal set_board_by_addr
+    
     addi $t3, $s0, 1180
     sw $t7, 0( $t3 ) 
+    # This section adds it to the board state
+    addi $a0, $t3, 0
+    addi $a1, $zero, 1
+    jal set_board_by_addr
     
     lw $ra, 0($sp)           # Restore original return address
     addi $sp, $sp, 4         # Free stack space
@@ -253,7 +288,7 @@ game_loop:
 # Ok, so a lot of my logic is based on the idea of converting the values of (1142) which is the memory address over to a more easier and manipulatable variable.
 # For example, 1912 would convert to (0,0) on the board. 
 
-# Notice that our board is (27 x 15) with it starting from two higher than the top left of the jar.
+# Notice that our board is (27 x 17) with it starting from two higher than the top left of the jar.
 # Finally, here are the keyboard inputs map to the commands.
 # A and D are the standard moving left and right
 # W is rotate
@@ -276,7 +311,7 @@ addr_to_board:
 # Get the value at the index board[$a0][$a1].
 # For example board[i][0] where i >= 2 is 5 because it's the wall.
 get_val_at_board:
-    mul $t8, $a0, 15
+    mul $t8, $a0, 17
     add $t8, $t8, $a1 # Get the index in the board
     add $t8, $t8, $s1 # Get the address on the board
     lb $v0, 0 ($t8)
@@ -297,7 +332,7 @@ set_board_by_addr:
     add $t0, $v0, $zero       # X position of Pill 1 on board
     add $t1, $v1, $zero       # Y position of Pill 1 on board
     
-    mul $t8, $t0, 15
+    mul $t8, $t0, 17
     add $t8, $t8, $t1          # Get the index in the board
     add $t8, $t8, $s1          # Get the address on the board
     sb $a1, 0 ($t8)            # Set value at the board
@@ -347,8 +382,26 @@ respond_to_Q:
     
 # Moves Down the current pill
 respond_to_S:
-    addi $s3, $s3, 256
-    addi $s4, $s4, 256
+    # Check if current pill is horizontal or not
+    addi $t4, $s3, 4
+    bne $s4, $t4, vertical_down_move
+        # If the pill is currently horizontal, this means we need to check the bottom of pill 1 and 2
+        addi $a0, $s3, 256
+        jal get_board_by_addr
+        bne $v0, 0, finite_no_down_movement 
+        addi $a0, $s4, 256
+        jal get_board_by_addr
+        bne $v0, 0, finite_no_down_movement 
+        j finite_down_movement
+    vertical_down_move:
+        # If the pill is currently vertical, this means we need to check the bottom of pill 1
+        addi $a0, $s3, 256
+        jal get_board_by_addr
+        bne $v0, 0, finite_no_down_movement 
+    finite_down_movement:
+        addi $s3, $s3, 256
+        addi $s4, $s4, 256
+    finite_no_down_movement:
     j update_board
     
 # Move left the current pill
@@ -376,7 +429,7 @@ respond_to_A:
     finite_no_left_movement:
     j update_board
     
-# Move left the current pill
+# Move right the current pill
 respond_to_D:
     # Check if current pill is horizontal or not
     addi $t4, $s3, 4
