@@ -29,7 +29,11 @@ ROW_LENGTH:
     .word 64
 # Color list
 colors: .word 0x00ff00, 0xff0000, 0x0000ff, 0x000000  # Green, Red, Blue, Black
+# virus color
+virus_colors: .word 0x028a0f, 0xd21404, 0x0442f6 # green, red, blue
 
+# Virus data allocation. Each virus is stored as (x-coord, y-coord, color)
+viruses: .space 48
 ##############################################################################
 # Mutable Data
 
@@ -65,18 +69,18 @@ board: .space 405 # 27 rows x 15 columns = 405
     # Run the game.
 main:
     lw $s0, ADDR_DSPL
-    la $s1, board # Load in the basic board address to $s1
+    la $s1, board                     # Load in the basic board address to $s1
     
     # Instantiate the board as filled with zeros.
     la $t0, board
-    li $t1, 405       # Total bytes to initialize (27*15 = 405)
-    li $t2, 0         # Value to store (0)
+    li $t1, 405                       # Total bytes to initialize (27*15 = 405)
+    li $t2, 0                         # Value to store (0)
     set_zero_board:
         beqz $t1, exit_zero_board     # Exit loop when counter ($t1) reaches 0
-        sb $t2, 0( $t0 )    # Store 0 at current address
-        addi $t0, $t0, 1  # Move to next byte
-        addi $t1, $t1, -1 # Decrement counter
-        j set_zero_board  # Repeat
+        sb $t2, 0( $t0 )              # Store 0 at current address
+        addi $t0, $t0, 1              # Move to next byte
+        addi $t1, $t1, -1             # Decrement counter
+        j set_zero_board              # Repeat
     exit_zero_board:
 
     
@@ -90,6 +94,9 @@ main:
     sw $s5, 0( $s4 )
     addi $s3, $s0, 1684
     sw $s6, 0( $s3 )
+    
+    jal virus_initializer
+    jal virus_generate_loop
     
     j game_loop
     
@@ -221,7 +228,6 @@ game_loop:
 	sw $t3, 0( $s3 )
     sw $t3, 0( $s4 )
 	
-	
 	# Checks if a key has been pressed.
 	# If it has call keyboard_input
 	lw $t0, ADDR_KBRD 
@@ -260,10 +266,10 @@ addr_to_board:
     sub $t8, $a0, 1140      # Subtract the board's top-left offset (1140)
     li $t9, 256             # Bytes per row (64 columns * 4 bytes per pixel)
     
-    divu $t8, $t9 # Divide by bytes per row: X = quotient, remainder = column offset
-    mflo $v0 # $v0 = X (row)
-    mfhi $t2 # $t2 = column offset (bytes)
-    srl $v1, $t2, 2 # Convert bytes to Y (columns): divide by 4 (since 4 bytes per pixel)
+    divu $t8, $t9           # Divide by bytes per row: X = quotient, remainder = column offset
+    mflo $v0                # $v0 = X (row)
+    mfhi $t2                # $t2 = column offset (bytes)
+    srl $v1, $t2, 2         # Convert bytes to Y (columns): divide by 4 (since 4 bytes per pixel)
     
     jr $ra  # Return to caller
 
@@ -282,23 +288,23 @@ get_val_at_board:
 # Input: $a0 = bitmap address, $a1 = value to set
 #--------------------------------------------------------------
 set_board_by_addr:
-    addi $sp, $sp, -4        # Allocate space on the stack
-    sw $ra, 0($sp)           # Save the original return address
+    addi $sp, $sp, -4         # Allocate space on the stack
+    sw $ra, 0($sp)            # Save the original return address
 
 
     sub $a0, $a0, $s0
     jal addr_to_board
-    add $t0, $v0, $zero # X position of Pill 1 on board
-    add $t1, $v1, $zero # Y position of Pill 1 on board
+    add $t0, $v0, $zero       # X position of Pill 1 on board
+    add $t1, $v1, $zero       # Y position of Pill 1 on board
     
     mul $t8, $t0, 15
-    add $t8, $t8, $t1 # Get the index in the board
-    add $t8, $t8, $s1 # Get the address on the board
-    sb $a1, 0 ($t8)   # Set value at the board
+    add $t8, $t8, $t1          # Get the index in the board
+    add $t8, $t8, $s1          # Get the address on the board
+    sb $a1, 0 ($t8)            # Set value at the board
    
-    lw $ra, 0($sp)           # Restore original return address
-    addi $sp, $sp, 4         # Free stack space
-    jr $ra                   # Return to caller
+    lw $ra, 0($sp)             # Restore original return address
+    addi $sp, $sp, 4           # Free stack space
+    jr $ra                     # Return to caller
     
     
 #--------------------------------------------------------------
@@ -429,44 +435,53 @@ respond_to_W:
     finish_rotate:
     j update_board
 
+# CREATE A FUNCTION THAT STORES/RESTORES ALL T REGISTERS FOR WHEN WE CALL FUNCTIONS
+
 # generate viruses in random locations with random colors
-
-generate_viruses:
-    la $t0, viruses      # load address of array of viruses
-    li $t1, 4            # generate 4 viruses (creates a counter to decrement from)
-    li $t2, 8            # x bounds 1-8
-    li $t3, 16           # y bounds 1-16
-
-# load $s7 with a random color
-virus_color:
-    # make 4 random x, y coords Min: , Max: 
-    li $v0, 42           # syscall to generate rand number
-    li $a0, 0            # generator ID is 0 by default
-    li $a1, 3            # upper bound (exclusive) set to 3
+virus_initializer:
+    li $t1, 0               # loop counter = 0
+    li $t9, 4               # make 4 viruses
+    
+virus_generate_loop:
+    beq $t1 $t9 virus_end   # if $t1 == $t9, jup to virus_end
+    lui $t0, 0x1000       # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000  # Load lower 16 bits of 0x10008000
+    li $v0, 42              # rand generator for x-coord
+    li $a0, 0               # lower bound is 19
+    li $a1, 17              # upper bound is 44
     syscall
-    la $t3, colors       # Load color array in
-    sll $a0, $a0, 2
-    add $t3, $t3, $a0    # Calculate address of new color
-    lw $s7, 0($t3) 
-    jr $ra
-
-generate_virus_loop:
-
-    # generate random x coord
-    li $v0, 42           # syscall for random number generator
-    li $a0, 0            # generator id
-    li $a1, 8            # upper bound 8 exclusive
+    add $t2, $zero, $a0     # store rand gen x-coord in t2
+    addi $t2, $t2, 29      # now bounds are 19-44
+    
+    li $v0, 42              # rand generator for y-coord
+    li $a0, 0               # lower bound is 5
+    li $a1, 20              # upper bound is 29
     syscall
-    addi $a0, $a0, 1     # shift range from 0-7 to 1-8
-    sw $a0, 0($t0)       # store x coord in first index of $t0 (array for virus)
+    add $t3, $zero, $a0     # store rand gen x-coord in t3
+    addi $t3, $t3, 10      # now bounds are 5-29
+    
+    sll $t2, $t2, 2         # multiply x-coord by 16
+    sll $t3, $t3, 8         # multiply y_coord by 4
+    add $t0, $t0, $t2       # add x offset to top left
+    add $t0, $t0, $t3       # add y offset to that too
+    
+    lw $t4, 0($t0)          # load value at current mem address
+    beq $t4, 0, make_virus  # if nothing is at that address, create a virus
+    j virus_generate_loop   # else: generate a new coordinate 
 
-    # generate random color and store it in $s7
-    jal virus_color      # call virus_color
-    sw $s7, 8($t0)       # store color
+make_virus:
+    li $v0, 42                  # random number generator
+    li $a0, 0                   # lower bound is 0
+    li $a1, 3                   # upper bound is 3
+    syscall
+    add $a1, $zero, $a0         # index of virus_colors
+    la $a0, virus_colors       # load address of colors
+    sll $t5 $a1 2               # t5 = $a1 * 4 
+    add $t6 $a0 $t5             # t6 = head of array + t5
+    lw $t7, 0($t6)  # Load the color value from $t6 into $t7
+    sw $t7, 0($t0)              # draw pixel of color t6 at t0
+    addi $t1, $t1, 1            # increment virus counter
+    j virus_generate_loop       # beginning of virus_gen_loop checks end condition
 
-    # generate next virus in virus array
-    addi $t0, $t0, 12               # increment through 12 bytes in array to move thru (x, y, color)
-    addi $t1, $t1, -1               # decrement counter
-    bnez $t1, generate_virus_loop   # jump to generate_virus_loop if $t1 is not 0
-
+virus_end:
     jr $ra
