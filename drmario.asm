@@ -492,11 +492,19 @@ respond_to_W:
     # Updates the pill
     addi $t2, $t1, 1
     bne $t2, $t4, rotate_h_v
-    # If the pill is currently horizontal
+    # If the pill is currently horizontal, check if it can rotate to that position
+    addi $a0, $s3, -256
+    jal get_board_by_addr
+    bne $v0, 0, finish_rotate
     addi $s4, $s3, -256
     j finish_rotate
     # If the pill is currently vertical
     rotate_h_v:
+        # Check if location to be updated is a wall or not
+        addi $a0, $s3, 4
+        jal get_board_by_addr
+        bne $v0, 0, finish_rotate
+        
         addi $s4, $s3, 4
         # Then we update the colour
         addi $t2, $s5, 0
