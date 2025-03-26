@@ -2,7 +2,7 @@
 # This file contains our implementation of Dr Mario.
 #
 # Student 1: Qi Wen Wei, 1010465168
-# Student 2: Name, Student Number (if applicable)
+# Student 2: Marina Tanaka, 1009784299
 #
 # We assert that the code submitted here is entirely our own 
 # creation, and will indicate otherwise when it is not.
@@ -30,10 +30,20 @@ ROW_LENGTH:
 # Color list
 colors: .word 0x00ff00, 0xff0000, 0x0000ff, 0x000000  # Green, Red, Blue, Black
 # virus color
-virus_colors: .word 0x028a0f, 0xd21404, 0x0442f6 # green, red, blue
-
-# Virus data allocation. Each virus is stored as (x-coord, y-coord, color)
-viruses: .space 48
+VIRUS_COLORS: .word 0x028a0f, 0xd21404, 0x0442f6 # green, red, blue with a tint
+GAME_OVER_ARRAY:  .word
+    0, -1, -1, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, 0, -1, 0, 0, -1, -1,
+    -1, 0, 0, 0, 0, 0, -1, 0, -1, 0, -1, -1, 0, -1, -1, 0, -1, 0, 0,
+    -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, -1, -1, 0, -1, -1, 0,
+    -1, 0, 0, -1, 0, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 0,
+    0, -1, -1, 0, 0, 0, -1, 0, -1, 0, -1, 0, 0, 0, -1, 0, 0, -1, -1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, -1, 0, 0, -1, 0, 0, 0, -1, 0, 0, -1, -1, 0, -1, -1, 0, 0, 0,
+    -1, 0, -1, 0, -1, -1, 0, -1, -1, 0, -1, 0, 0, 0, -1, 0, -1, 0, 0, 
+    -1, 0, -1, 0, 0, -1, 0, -1, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0
+    -1, 0, -1, 0, 0, -1, -1, -1, 0, 0, -1, 0, 0, 0, -1, 0, -1, 0, 0, 
+    0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, -1, 0, -1, 0, 0, -1, 0, 
+    
 ##############################################################################
 # Mutable Data
 
@@ -60,11 +70,9 @@ board: .space 459 # 27 rows x 17 columns = 405
 # For example: Say we have the pill like the following
 #     BB
 # Then, in this case Pill 1 refers to the left one while Pill 2 refers to the right one
-
 # $s5 = Pill 1 Color
 # $s6 = Pill 2 Color
 # $s7 = Virus Color
-
 
 
     # Run the game.
@@ -84,7 +92,6 @@ main:
         j set_zero_board              # Repeat
     exit_zero_board:
 
-    
     
     # Initialize the game
     jal instantiate_map # Save return address at $ra and calls instantiate map to build map
@@ -326,7 +333,6 @@ set_board_by_addr:
     addi $sp, $sp, -4         # Allocate space on the stack
     sw $ra, 0($sp)            # Save the original return address
 
-
     sub $a0, $a0, $s0
     jal addr_to_board
     add $t0, $v0, $zero       # X position of Pill 1 on board
@@ -336,11 +342,10 @@ set_board_by_addr:
     add $t8, $t8, $t1          # Get the index in the board
     add $t8, $t8, $s1          # Get the address on the board
     sb $a1, 0 ($t8)            # Set value at the board
-   
-    lw $ra, 0($sp)             # Restore original return address
-    addi $sp, $sp, 4           # Free stack space
-    jr $ra                     # Return to caller
     
+    lw $ra, 0($sp)             # Restore original return address
+    addi $sp, $sp, 4         # Free stack space
+    jr $ra                     # Return to caller
     
 #--------------------------------------------------------------
 # Gets the board value corresponding to a bitmap address.
@@ -366,6 +371,7 @@ get_board_by_addr:
 # Central function that handles all the keyboard inputs
 keybord_input: 
     lw $a0, 4($t0)                  # Load second word from keyboard
+    beq $a0, 0x20, respond_to_space # check if space bar was pressed
     beq $a0, 0x71, respond_to_Q     # Check if the key 'q' was pressed
     beq $a0, 0x77, respond_to_W     # Check if the key 'w' was pressed
     beq $a0, 0x73, respond_to_S     # Check if the key 's' was pressed
@@ -373,8 +379,19 @@ keybord_input:
     beq $a0, 0x61, respond_to_A     # Check if the key 'a' was pressed
     beq $a0, 0x64, respond_to_D     # Check if the key 'd' was pressed
     j update_board
+
+# pauses game when called
+respond_to_space:
+    lw $t0, ADDR_KBRD                   # load keyboard addr
+    lw $t1, 0($t0)                      # grab keyboard ready bit
+    beq $t1, $zero, respond_to_space    # loop until these 3 lines until something is pressed
     
+    lw $t0, 4($t0)                      # Get the key value
+    lw $t1, 0x20                        # store space ascii in t1
+    bne $t0, $t1, respond_to_space      # loop until key pressed is space bar
     
+    jr $ra                              # if space bar is pressed, return to game_loop
+
 # Exits program when called
 respond_to_Q:
     li $v0, 10                      # Quit gracefully
@@ -383,22 +400,22 @@ respond_to_Q:
 # Moves Down the current pill
 respond_to_S:
     # Check if current pill is horizontal or not
-    addi $t4, $s3, 4
-    bne $s4, $t4, vertical_down_move
+    addi $t4, $s3, 4                        # t4 is the address of second half of pill
+    bne $s4, $t4, vertical_down_move        # if pill is vertical, jump to vert down move
         # If the pill is currently horizontal, this means we need to check the bottom of pill 1 and 2
-        addi $a0, $s3, 256
+        addi $a0, $s3, 256                  # go to addr of pixel under s3
+        jal get_board_by_addr               # check if there is smth at that address
+        bne $v0, 0, finite_no_down_movement # if addr is not empty, skip
+        addi $a0, $s4, 256                  # repeat process for second half of pill
         jal get_board_by_addr
         bne $v0, 0, finite_no_down_movement 
-        addi $a0, $s4, 256
-        jal get_board_by_addr
-        bne $v0, 0, finite_no_down_movement 
-        j finite_down_movement
+        j finite_down_movement              # else: go down
     vertical_down_move:
         # If the pill is currently vertical, this means we need to check the bottom of pill 1
-        addi $a0, $s3, 256
+        addi $a0, $s3, 256                  # if block under is taken: skip
         jal get_board_by_addr
         bne $v0, 0, finite_no_down_movement 
-    finite_down_movement:
+    finite_down_movement:                   # shift both halves down one row
         addi $s3, $s3, 256
         addi $s4, $s4, 256
     finite_no_down_movement:
@@ -489,6 +506,10 @@ respond_to_W:
     j update_board
 
 # CREATE A FUNCTION THAT STORES/RESTORES ALL T REGISTERS FOR WHEN WE CALL FUNCTIONS
+# IMPLEMENT UPDATING THE BOARD SO THAT VIRUSES ARE 1 AND OTHER
+# PILLS ON THE BOARD ARE 1 SO THAT THEY DETECT COLLISION
+# MAYBE FOR NOW MAKE VIRUSES AND PILLS SAME COLOR
+# SO THAT DETECTING A FOUR IN A ROW IS EASIER
 
 # generate viruses in random locations with random colors
 virus_initializer:
@@ -496,45 +517,108 @@ virus_initializer:
     li $t9, 4               # make 4 viruses
     
 virus_generate_loop:
-    beq $t1 $t9 virus_end   # if $t1 == $t9, jup to virus_end
-    lui $t0, 0x1000       # Load upper 16 bits of 0x10008000
-    ori $t0, $t0, 0x8000  # Load lower 16 bits of 0x10008000
-    li $v0, 42              # rand generator for x-coord
-    li $a0, 0               # lower bound is 19
-    li $a1, 17              # upper bound is 44
+    beq $t1, $t9, virus_end   # if $t1 == $t9, jump to virus_end
+    lui $t0, 0x1000           # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000      # Load lower 16 bits of 0x10008000
+    li $v0, 42                # rand generator for x-coord
+    li $a0, 0                 # lower bound is 0
+    li $a1, 15                # upper bound is 15
     syscall
     add $t2, $zero, $a0     # store rand gen x-coord in t2
-    addi $t2, $t2, 29      # now bounds are 19-44
+    addi $t2, $t2, 30      # now bounds are 30-45
     
     li $v0, 42              # rand generator for y-coord
-    li $a0, 0               # lower bound is 5
-    li $a1, 20              # upper bound is 29
+    li $a0, 0               # lower bound is 0
+    li $a1, 17              # upper bound is 17
     syscall
     add $t3, $zero, $a0     # store rand gen x-coord in t3
-    addi $t3, $t3, 10      # now bounds are 5-29
+    addi $t3, $t3, 13      # now bounds are 13-30
     
     sll $t2, $t2, 2         # multiply x-coord by 16
     sll $t3, $t3, 8         # multiply y_coord by 4
     add $t0, $t0, $t2       # add x offset to top left
     add $t0, $t0, $t3       # add y offset to that too
     
-    lw $t4, 0($t0)          # load value at current mem address
-    beq $t4, 0, make_virus  # if nothing is at that address, create a virus
-    j virus_generate_loop   # else: generate a new coordinate 
+    lw $t4, 0($t0)            # load value at current memory address
+    bne $t4, 0, virus_generate_loop  # if occupied, generate a new position
+    jal make_virus            # jump and link make_virus as a subroutine
+    j virus_generate_loop     # jump back to the top
 
 make_virus:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
     li $v0, 42                  # random number generator
     li $a0, 0                   # lower bound is 0
     li $a1, 3                   # upper bound is 3
     syscall
-    add $a1, $zero, $a0         # index of virus_colors
-    la $a0, virus_colors       # load address of colors
+    add $a1, $zero, $a0         # index of VIRUS_COLORS
+    la $a0, VIRUS_COLORS        # load address of colors
     sll $t5 $a1 2               # t5 = $a1 * 4 
     add $t6 $a0 $t5             # t6 = head of array + t5
-    lw $t7, 0($t6)  # Load the color value from $t6 into $t7
+    lw $t7, 0($t6)              # load the color value from $t6 into $t7
     sw $t7, 0($t0)              # draw pixel of color t6 at t0
+    # This section adds it to the board state
+    addi $a0, $t0, 0
+    # save t1, t9 on the stack, run set_virus_occupied, then restore
+    jal store_registers
+    jal set_virus_occupied
+    jal restore_registers
     addi $t1, $t1, 1            # increment virus counter
-    j virus_generate_loop       # beginning of virus_gen_loop checks end condition
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+# input:
+# a0 - bitmap addr of virus position
+set_virus_occupied:
+    addi $a1, $zero, 1
+    addi $sp, $sp, -4         # open up space on stack
+    sw $ra, 0($sp)            # save the original return address
+
+    sub $a0, $a0, $s0
+    jal addr_to_board
+    add $t0, $v0, $zero       # x-coord of virus
+    add $t1, $v1, $zero       # y-coord of virus
+    
+    mul $t8, $t0, 17
+    add $t8, $t8, $t1          # get index
+    add $t8, $t8, $s1          # get address
+    sb $a1, 0 ($t8)            # set value at the board
+    
+    lw $ra, 0($sp)             # restore original return address
+    addi $sp, $sp, 4           # free stack space
+    jr $ra
 
 virus_end:
+    jr $ra
+    
+game_over:
+    la $a0 GAME_OVER_ARRAY
+
+store_registers:            # push all t registers onto stack 
+    addi $sp, $sp, -40        
+    sw $t0, 36($sp)
+    sw $t1, 32($sp)
+    sw $t2, 28($sp)
+    sw $t3, 24($sp)
+    sw $t4, 20($sp)
+    sw $t5, 16($sp)
+    sw $t6, 12($sp)
+    sw $t7, 8($sp)
+    sw $t8, 4($sp)
+    sw $t9, 0($sp)
+    jr $ra
+    
+restore_registers:            # pop all t registers from stack (reverse order LIFO)
+    lw $t9, 0($sp)
+    lw $t8, 4($sp)
+    lw $t7, 8($sp)
+    lw $t6, 12($sp)
+    lw $t5, 16($sp)
+    lw $t4, 20($sp)
+    lw $t3, 24($sp)
+    lw $t2, 28($sp)
+    lw $t1, 32($sp)
+    lw $t0, 36($sp)
+    addi $sp, $sp, 40         # Deallocate all space at once
     jr $ra
