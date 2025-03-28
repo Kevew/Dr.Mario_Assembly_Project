@@ -103,7 +103,6 @@ main:
     addi $s3, $s0, 1684
     sw $s6, 0( $s3 )
     
-    
     jal virus_initializer
     jal virus_generate_loop
     
@@ -112,22 +111,22 @@ main:
 
 # This function sets $s5 and $s6 as two random colors.
 random_color: 
-    li $v0, 42              # Syscall for random number generation
+    li $v0, 42 # Syscall for random number generation
     li $a0, 0               # Use generator ID 0 (default)
-    li $a1, 3               # Upper bound (exclusive): 3 (0, 1, or 2)
+    li $a1, 3 # Upper bound (exclusive): 3 (0, 1, or 2)
     syscall
-    la $t3, colors          # Load color array in
+    la $t3, colors # Load color array in
     sll $a0, $a0, 2
-    add $t3, $t3, $a0       # Calculate address of new color
+    add $t3, $t3, $a0 # Calculate address of new color
     lw $s5, 0( $t3 ) 
     
-    li $v0, 42              # Syscall for random number generation
+    li $v0, 42 # Syscall for random number generation
     li $a0, 0               # Use generator ID 0 (default)
-    li $a1, 3               # Upper bound (exclusive): 3 (0, 1, or 2)
+    li $a1, 3 # Upper bound (exclusive): 3 (0, 1, or 2)
     syscall
-    la $t3, colors          # Load color array in
+    la $t3, colors # Load color array in
     sll $a0, $a0, 2
-    add $t3, $t3, $a0       # Calculate address of new color
+    add $t3, $t3, $a0 # Calculate address of new color
     lw $s6, 0( $t3 ) 
     
     jr $ra
@@ -285,9 +284,10 @@ game_loop:
     sw $s6, 0( $s4 )
 	
 	# Pauses the program for 1 miliseconds
-	li $v0, 32      # sleep
-    li $a0, 1       # 1 milisecond
+	li $v0, 32
+    li $a0, 1
     syscall
+
 	
     # 5. Go back to Step 1
     j game_loop
@@ -394,7 +394,7 @@ respond_to_space:
 
 # Exits program when called
 respond_to_Q:
-    li $v0, 10                          # exit gracefully
+    li $v0, 10                      # Quit gracefully
     syscall
     
 # Moves Down the current pill
@@ -402,7 +402,7 @@ respond_to_S:
     # Check if current pill is horizontal or not
     addi $t4, $s3, 4                        # t4 is the address of second half of pill
     bne $s4, $t4, vertical_down_move        # if pill is vertical, jump to vert down move
-        # If the pill is currently horizontal, we need to check the bottom of pill 1 and 2
+        # If the pill is currently horizontal, this means we need to check the bottom of pill 1 and 2
         addi $a0, $s3, 256                  # go to addr of pixel under s3
         jal get_board_by_addr               # check if there is smth at that address
         bne $v0, 0, finite_no_down_movement # if addr is not empty, skip
@@ -411,14 +411,29 @@ respond_to_S:
         bne $v0, 0, finite_no_down_movement 
         j finite_down_movement              # else: go down
     vertical_down_move:
-        # If the pill is currently vertical, we need to check the bottom of pill 1
+        # If the pill is currently vertical, this means we need to check the bottom of pill 1
         addi $a0, $s3, 256                  # if block under is taken: skip
         jal get_board_by_addr
         bne $v0, 0, finite_no_down_movement 
     finite_down_movement:                   # shift both halves down one row
         addi $s3, $s3, 256
         addi $s4, $s4, 256
+        j finite_update_down_movement
     finite_no_down_movement:
+        sw $s5, 0($s3)
+        sw $s6, 0($s4)
+        
+        addi $a0, $s3, 0
+        addi $a1, $zero, 1
+        jal set_board_by_addr
+        
+        addi $a0, $s4, 0
+        addi $a1, $zero, 1
+        jal set_board_by_addr
+        
+        addi $s4, $s0, 1428
+        addi $s3, $s0, 1684
+    finite_update_down_movement:
     j update_board
     
 # Move left the current pill
@@ -503,32 +518,42 @@ respond_to_W:
         # Check if location to be updated is a wall or not
         addi $a0, $s3, 4
         jal get_board_by_addr
-        bne $v0, 0, finish_rotate
-        
+        bne $v0, 0, rotate_h_l
         addi $s4, $s3, 4
         # Then we update the colour
         addi $t2, $s5, 0
         addi $s5, $s6, 0
         addi $s6, $t2, 0
+        j finish_rotate
+        rotate_h_l:
+            # In this case, try rotating the other way
+            addi $a0, $s3, -4
+            jal get_board_by_addr
+            bne $v0, 0, finish_rotate
+            addi $s3, $s3, -4
+            addi $s4, $s3, 4
+            # Then we update the colour
+            addi $t2, $s5, 0
+            addi $s5, $s6, 0
+            addi $s6, $t2, 0
     finish_rotate:
     j update_board
 
+# CREATE A FUNCTION THAT STORES/RESTORES ALL T REGISTERS FOR WHEN WE CALL FUNCTIONS
+# IMPLEMENT UPDATING THE BOARD SO THAT VIRUSES ARE 1 AND OTHER
+# PILLS ON THE BOARD ARE 1 SO THAT THEY DETECT COLLISION
 # MAYBE FOR NOW MAKE VIRUSES AND PILLS SAME COLOR
 # SO THAT DETECTING A FOUR IN A ROW IS EASIER
 
 # generate viruses in random locations with random colors
 virus_initializer:
-
-    
     li $t1, 0               # loop counter = 0
     li $t9, 4               # make 4 viruses
     
 virus_generate_loop:
     beq $t1, $t9, virus_end   # if $t1 == $t9, jump to virus_end
-    lw $t0, ADDR_DSPL
-    sw $t1, 0($t0)
-    # lui $t0, 0x1000           # Load upper 16 bits of 0x10008000
-    # ori $t0, $t0, 0x8000      # Load lower 16 bits of 0x10008000
+    lui $t0, 0x1000           # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000      # Load lower 16 bits of 0x10008000
     li $v0, 42                # rand generator for x-coord
     li $a0, 0                 # lower bound is 0
     li $a1, 15                # upper bound is 15
@@ -602,10 +627,10 @@ virus_end:
     j update_board
     
 game_over:
-    la $a0 GAME_OVER_ARRAY      # display the game over array. (TODO: when to exit gracefully)
+    la $a0 GAME_OVER_ARRAY
 
-store_registers:                # push all t registers onto stack 
-    addi $sp, $sp, -40          # allocate all space at once
+store_registers:            # push all t registers onto stack 
+    addi $sp, $sp, -40        
     sw $t0, 36($sp)
     sw $t1, 32($sp)
     sw $t2, 28($sp)
@@ -631,5 +656,3 @@ restore_registers:            # pop all t registers from stack (reverse order LI
     lw $t0, 36($sp)
     addi $sp, $sp, 40         # Deallocate all space at once
     jr $ra
-    
-    # TODO: IMPLEMENT (MOVE / CONNECT-4 / ROTATE) SOUNDS
