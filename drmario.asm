@@ -28,9 +28,10 @@ ADDR_KBRD:
 ROW_LENGTH:
     .word 64
 # Color list
-colors: .word 0x00ff00, 0xff0000, 0x0000ff, 0x000000  # Green, Red, Blue, Black
+colors: .word 0xffff00, 0xd21404, 0x0442f6, 0x000000  # Yellow, Red, Blue, Black
+# Possible pill color
 # virus color
-VIRUS_COLORS: .word 0x028a0f, 0xd21404, 0x0442f6 # green, red, blue with a tint
+VIRUS_COLORS: .word 0xffff00, 0xd21404, 0x0442f6 # yellow, red, blue with a tint
 GAME_OVER_ARRAY:  .word
     0, -1, -1, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, 0, -1, 0, 0, -1, -1,
     -1, 0, 0, 0, 0, 0, -1, 0, -1, 0, -1, -1, 0, -1, -1, 0, -1, 0, 0,
@@ -44,11 +45,17 @@ GAME_OVER_ARRAY:  .word
     -1, 0, -1, 0, 0, -1, -1, -1, 0, 0, -1, 0, 0, 0, -1, 0, -1, 0, 0, 
     0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, -1, 0, -1, 0, 0, -1, 0, 
     
+# Extra temp storage    
+arr: .space 5120
+
+newline: .asciiz "\n"
+    
 ##############################################################################
 # Mutable Data
 
 # State of the current board
 # Think of it as a 27x17 array.
+# If a index at a array is 2, then it's a virus
 # If a index at a array is 1, then it's a wall
 # If a index at a array is 0, then it's empty space
 board: .space 459 # 27 rows x 17 columns = 405
@@ -73,6 +80,7 @@ board: .space 459 # 27 rows x 17 columns = 405
 # $s5 = Pill 1 Color
 # $s6 = Pill 2 Color
 # $s7 = Virus Color
+# $s8 = Can the player move? 0 - Player can move, 1 - Player cannot move as the map is still updating the falling pills
 
 
     # Run the game.
@@ -111,25 +119,65 @@ main:
 
 # This function sets $s5 and $s6 as two random colors.
 random_color: 
+    # Generate a random number between 0 and 5
     li $v0, 42 # Syscall for random number generation
     li $a0, 0               # Use generator ID 0 (default)
-    li $a1, 3 # Upper bound (exclusive): 3 (0, 1, or 2)
+    li $a1, 6 # Upper bound (exclusive): 6 (0..5)
     syscall
-    la $t3, colors # Load color array in
-    sll $a0, $a0, 2
-    add $t3, $t3, $a0 # Calculate address of new color
-    lw $s5, 0( $t3 ) 
+    move $t0, $a0 # Result saved in $t0
+    la $t1, colors
     
-    li $v0, 42 # Syscall for random number generation
-    li $a0, 0               # Use generator ID 0 (default)
-    li $a1, 3 # Upper bound (exclusive): 3 (0, 1, or 2)
-    syscall
-    la $t3, colors # Load color array in
-    sll $a0, $a0, 2
-    add $t3, $t3, $a0 # Calculate address of new color
-    lw $s6, 0( $t3 ) 
+    li $t5, 0
+    beq $t0, $t5, red_red
+
+    li $t5, 1
+    beq $t0, $t5, blue_blue
+
+    li $t5, 2
+    beq $t0, $t5, yellow_yellow
+
+    li $t5, 3
+    beq $t0, $t5, red_blue
+
+    li $t5, 4
+    beq $t0, $t5, red_yellow
+
+    li $t5, 5
+    beq $t0, $t5, blue_yellow
     
-    jr $ra
+red_red:
+    lw $s5, 4($t1) 
+    lw $s6, 4($t1) 
+    j exit_random
+    
+blue_blue:
+    lw $s5, 8($t1)
+    lw $s6, 8($t1)
+    j exit_random
+    
+yellow_yellow:
+    lw $s5, 0($t1)
+    lw $s6, 0($t1)
+    j exit_random
+
+red_blue:
+    lw $s5, 4($t1)
+    lw $s6, 8($t1)
+    j exit_random
+    
+red_yellow:
+    lw $s5, 4($t1)
+    lw $s6, 0($t1)
+    j exit_random
+
+blue_yellow:
+    lw $s5, 8($t1)
+    lw $s6, 0($t1)
+    
+exit_random:
+    jr   $ra          # Return to caller
+
+    
     
 # This function instializes the map boundaries
 instantiate_map: 
@@ -175,7 +223,7 @@ instantiate_map:
     
     # Draw the bottom row
     addi $t3, $zero, 7796 # t3 tracks the current location starting from the left
-    addi $t4, $zero, 7864 # t4 is the right part
+    addi $t4, $zero, 7860 # t4 is the right part
     wall_bottom:
         beq $t3, $t4, wall_bottom_end # Checks if reached the bottom yet.
         add $t5, $s0, $t3 # If it has not, update $t5 which is where we want to draw
@@ -261,10 +309,9 @@ game_loop:
 	# 2b. Update locations (capsules)
 	# 3. Draw the screen
 	# 4. Sleep
-	
-	# How do I draw the current pill falling? I erase it at the beginning of the game_loop. After all the information is proessed, then I draw that one again the end
+  
+    # How do I draw the current pill falling? I erase it at the beginning of the game_loop. After all the information is proessed, then I draw that one again the end
 	# Setting the current pill positions to black
-      
     la $t3, colors
     addi $t3, $t3, 12
 	sw $t3, 0( $s3 )
@@ -424,15 +471,16 @@ respond_to_S:
         sw $s6, 0($s4)
         
         addi $a0, $s3, 0
-        addi $a1, $zero, 1
+        add $a1, $zero, $s4
         jal set_board_by_addr
         
         addi $a0, $s4, 0
-        addi $a1, $zero, 1
+        add $a1, $zero, $s3
         jal set_board_by_addr
-        
+        jal random_color
         addi $s4, $s0, 1428
         addi $s3, $s0, 1684
+        jal evaluate_board
     finite_update_down_movement:
     j update_board
     
@@ -605,7 +653,7 @@ make_virus:
 # input:
 # a0 - bitmap addr of virus position
 set_virus_occupied:
-    addi $a1, $zero, 1
+    addi $a1, $zero, 2
     addi $sp, $sp, -4         # open up space on stack
     sw $ra, 0($sp)            # save the original return address
 
@@ -656,3 +704,168 @@ restore_registers:            # pop all t registers from stack (reverse order LI
     lw $t0, 36($sp)
     addi $sp, $sp, 40         # Deallocate all space at once
     jr $ra
+
+
+# evaluate_board:
+#   This subroutine scans the board from address offset 1912 to 7800.
+#   For each starting location (i + j), it first checks horizontally:
+#     - It counts consecutive cells (in steps of 4 bytes) with the same color.
+#     - If 4 or more are found, it stores all those cell addresses in arr.
+#   It then does a similar check vertically (in steps of 256 bytes).
+#   Finally, it goes through the collected addresses in arr and resets the board
+evaluate_board:
+    # $t0 will hold our "remove" counter (number of entries stored in arr)
+    addi $t9, $zero, 0 # remove = 0
+    # Outer loop: i from 1912 to 7544
+    li $t1, 1912
+    
+evaluate_outer_loop:
+    addi $sp, $sp, -4        # Allocate space on the stack
+    sw $ra, 0($sp)           # Save the original return address
+    bge $t1, 7800, evaluate_removal_phase  
+    # Inner loop: j from 0 to 60 
+    li $t2, 0 # t2 = j
+    evaluate_inner_loop:
+         bge $t2, 60, evaluate_next_i    
+         
+         # t3 represents current location j
+         add $t3, $t1, $t2 # i + j
+         add $t4, $t3, $s0
+         #load current board color
+         lw $t6, 0( $t4 ) # color of current i j on map
+         # Check if color is black
+         beq $t6, $zero, evaluate_skip_j
+         add $t7, $t3, 4
+         li $t8, 1 # horizontal count = 1
+         evaluate_horizontal_loop:
+             add $t5, $t1, 60 # This stores i + 60
+             bge $t7, $t5, evaluate_horiz_done
+             
+             add $t4, $t7, $s0 # Add offset
+             lw $t5, 0 ($t4)
+             bne $t5, $t6, evaluate_horiz_done # If color at t7 is the same color
+             
+             addi $t8, $t8, 1 # If it is, increase horizontal count
+             addi $t7, $t7, 4 # Move 4 more left
+             j evaluate_horizontal_loop
+         evaluate_horiz_done:
+            li $t5, 4 # load a constant 4 to check if statement
+            blt $t8, $t5, evaluate_horiz_skip
+
+            # Record horizontal removals
+            move $t8, $t3 # Reuse the $t8, as count is not needed yet
+            evaluate_horiz_store:
+                bge $t8, $t7, evaluate_horiz_store_done
+                la $t4, arr
+                sll $t5, $t9, 2 # New offset = remove * 4
+                add $t5, $t4, $t5 # Address in arr to store removal element
+                sw $t8, 0( $t5 ) # Store the removal offset
+                addi $t9, $t9, 1 # Increase removal
+                add $t8, $t8, 4 # k += 4
+                j evaluate_horiz_store
+            evaluate_horiz_store_done:
+         evaluate_horiz_skip:
+            # Start of the vertical check
+            add $t7, $t3, 256 # Check for the vertical pointer now
+            li $t8, 1 # Reset the count for the vertical stuff now
+            evaluate_vert_loop:
+                li $t5, 7800 # Boundary for vertical scan
+                bge $t7, $t5, evaluate_vert_done # Check if vertical went beyond 7544 yet.
+                
+                add $t4, $t7, $s0
+                lw $t5, 0 ( $t4 ) # load in the current color at the vertical location
+                bne $t5, $t6, evaluate_vert_done # Check color to original location
+                
+                addi $t8, $t8, 1 # If it is equal, increase horizontal count
+                addi $t7, $t7, 256 # Move 256 more down
+                j evaluate_vert_loop
+        evaluate_vert_done:
+            li $t5, 4
+            blt $t8, $t5, evaluate_vert_skip # Check if there was at least 4 colors with the same color
+            
+            add $t8, $t3, $zero # Start adding the new elements to the thing
+        evaluate_vert_store:
+            bge $t8, $t7, evaluate_vert_store_done
+            la $t4, arr
+            sll $t5, $t9, 2 # Convert to bytes
+            add $t5, $t4, $t5
+            sw $t8, 0($t5)
+            addi $t9, $t9, 1
+            add $t8, $t8, 256
+            j evaluate_vert_store
+        evaluate_vert_store_done:
+        evaluate_vert_skip:
+        evaluate_skip_j:
+            addi $t2, $t2, 4 # j += 4
+            j evaluate_inner_loop
+        evaluate_next_i:
+            addi $t1, $t1, 256 # i += 256
+            j evaluate_outer_loop
+    evaluate_removal_phase:
+        li $t2, 0 # This acts as i for the new loop at the end
+        la $t6, colors
+    evaluate_remove_loop:
+        bge $t2, $t9, finish_eval
+        
+        la $t4, arr # load arr base address
+        sll $t8, $t2, 2 # compute offset = t2 * 4
+        addu $t8, $t4, $t8 # effective address in arr
+        lw $t3, 0($t8) # t3 = board offset to remove
+        
+        add $t3, $t3, $s0
+        lw $t5, 12( $t6 ) # Paint over the old stuff
+        
+        
+        
+        sw $t5, 0($t3)
+        addi $t2, $t2, 1
+        j evaluate_remove_loop
+        
+    finish_eval:
+        lw $ra, 0($sp)
+        addi $sp, $sp, 4
+        jr $ra
+# Here is a pseudo code of what evaluate_board does
+#arr[10000];
+#remove=0;
+#for(int i = 1912;i < 7544;i++){
+#    for(int j = 0;j < 60;j += 4){
+#       int location = i + j;
+#       color = board[location]
+#       if(color == 0) continue;
+#       location += 4;
+#       int count = 1;
+#       while(location < i + 60 && color == board[location]){
+#           count += 1;
+#       }
+#       if(count >= 4){
+#            for(int k = i + j;k < location;k+=4){
+#               arr[remove] = k;
+#            }
+#       }
+#       location = i + j;
+#       int count = 1;
+#       while(location < 7544 && color == board[location]){
+#           count += 1;
+#       }
+#       if(count >= 4){
+#            for(int k = i + j + 256;k < location;k+=256){
+#               arr[remove] = k;
+#            }
+#       }
+#    }
+#}
+#for(int i = 0;i < remove;i++){
+#   board[arr[remove]] = -1;
+#}
+
+
+
+# Testing
+add  $a0, $t3, $zero
+li    $v0, 1       # syscall to print integer
+syscall
+# Print newline:
+la    $a0, newline
+li    $v0, 4
+syscall
