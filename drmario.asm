@@ -45,9 +45,9 @@ GAME_OVER_ARRAY:  .word
     -1, 0, -1, 0, 0, -1, -1, -1, 0, 0, -1, 0, 0, 0, -1, 0, -1, 0, 0, 
     0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, -1, 0, -1, 0, 0, -1, 0, 
     
-# Extra temp storage    
+# Extra temp storage. Think of it as like extra registers.
 arr: .space 5120
-
+# For testing purposes
 newline: .asciiz "\n"
     
 ##############################################################################
@@ -58,7 +58,8 @@ newline: .asciiz "\n"
 # If a index at a array is 2, then it's a virus
 # If a index at a array is 1, then it's a wall
 # If a index at a array is 0, then it's empty space
-board: .space 459 # 27 rows x 17 columns = 405
+.align 2             # Align to 4 bytes (2^2)
+board: .space 1836 # 27 rows x 17 columns = 459 * 4 = 1836
 ##############################################################################
 # Code
 ##############################################################################
@@ -303,13 +304,9 @@ instantiate_map:
 
 
 game_loop:
-    # 1a. Check if key has been pressed
-    # 1b. Check which key has been pressed
-    # 2a. Check for collisions
-	# 2b. Update locations (capsules)
-	# 3. Draw the screen
-	# 4. Sleep
-  
+    # The first thing in the game loop is to evaluate if gravity is currently being enforced. If so, we can't allow the player to be moving as of the present as we wait for the block to fall.
+    jal gravity
+
     # How do I draw the current pill falling? I erase it at the beginning of the game_loop. After all the information is proessed, then I draw that one again the end
 	# Setting the current pill positions to black
     la $t3, colors
@@ -367,8 +364,9 @@ addr_to_board:
 get_val_at_board:
     mul $t8, $a0, 17
     add $t8, $t8, $a1 # Get the index in the board
+    sll $t8, $t8, 2       # Multiply cell index by 4 (since each cell is 4 bytes)
     add $t8, $t8, $s1 # Get the address on the board
-    lb $v0, 0 ($t8)
+    lw $v0, 0 ($t8)
     jr $ra
 
 # The two functions above finally allows us to define the next two functions. The first loads a value $a1 into the board at $a0. The second reads
@@ -387,8 +385,9 @@ set_board_by_addr:
     
     mul $t8, $t0, 17
     add $t8, $t8, $t1          # Get the index in the board
+    sll $t8, $t8, 2       # Multiply cell index by 4 (since each cell is 4 bytes)
     add $t8, $t8, $s1          # Get the address on the board
-    sb $a1, 0 ($t8)            # Set value at the board
+    sw $a1, 0 ($t8)            # Set value at the board
     
     lw $ra, 0($sp)             # Restore original return address
     addi $sp, $sp, 4         # Free stack space
@@ -470,13 +469,19 @@ respond_to_S:
         sw $s5, 0($s3)
         sw $s6, 0($s4)
         
+        jal store_registers
         addi $a0, $s3, 0
         add $a1, $zero, $s4
         jal set_board_by_addr
+        jal restore_registers
         
+        
+        jal store_registers
         addi $a0, $s4, 0
         add $a1, $zero, $s3
         jal set_board_by_addr
+        jal restore_registers
+    
         jal random_color
         addi $s4, $s0, 1428
         addi $s3, $s0, 1684
@@ -664,6 +669,7 @@ set_virus_occupied:
     
     mul $t8, $t0, 17
     add $t8, $t8, $t1          # get index
+    sll $t8, $t8, 2
     add $t8, $t8, $s1          # get address
     sb $a1, 0 ($t8)            # set value at the board
     
@@ -825,8 +831,8 @@ evaluate_outer_loop:
         sw $t5, 0($t3)
         addi $t2, $t2, 1
         j evaluate_remove_loop
-        
     finish_eval:
+        jal update_pill_structure
         lw $ra, 0($sp)
         addi $sp, $sp, 4
         jr $ra
@@ -863,7 +869,186 @@ evaluate_outer_loop:
 #for(int i = 0;i < remove;i++){
 #   board[arr[remove]] = -1;
 #}
+# Then, update the pill structure locations
 
+# Correct pill structure after evaluate deletion:
+# Recall that a pill at (x,y) and (x+1,y), the board[x][y] = (x+1,y) (in numebr form)
+# This means that if (x+1,y) is deleted, then we need to update board[x][y] = (x,y)
+# What we do, is iterate over the board and check the pill thing at each location
+update_pill_structure:
+    addi $sp, $sp, -4
+    sw $ra, 0 ( $sp )
+    li $t0, 1912 # Hold i = 0
+    update_pill_structure_outer_loop:
+        bge $t0, 7800, update_pill_structure_end
+        li $t1, 0 # Hold j = 0
+        update_pill_structure_inner_loop:
+            bge $t1, 60, update_pill_structure_next_i
+            
+            add $t2, $t1, $t0 # Holds i + j
+            add $t3, $t2, $s0 # Adds offset for the main page
+            
+            # Check if this is a pill or not
+            # We first want to check if this place is even a wall or not. Basically, if it has value 2 or 0, it should not do anything
+            jal store_registers
+            addi $a0, $t3, 0
+            jal get_board_by_addr
+            jal restore_registers 
+            
+            beq $v0, 2, update_pill_structure_finish_update # Virus meaning we don't check
+            beq $v0, 0, update_pill_structure_finish_update # Empty space meaning we don't check
+
+            # Get the pill structure at the location
+            jal store_registers
+            addi $a0, $t3, 0
+            jal get_board_by_addr
+            jal restore_registers
+            
+            
+            jal store_registers
+            add $a0, $v0, $zero # pill structure we need to check
+            jal get_board_by_addr
+            jal restore_registers
+            # Pill to actually check
+            add $t4, $v0, $zero # t4 is the pill we want to check if it has been erased or not
+            # Check if the pill structure at that point has been erased or not
+            # If it has, set the pill structure so that it's just the current location
+            # If it has not, do nothing
+            beq $t4, $t3, update_pill_structure_finish_update 
+                # This is the case where the other pill has been erased, then we update the $t3 to point to itself meaning it's now a 1x1 pill instead of a 2x1 pill
+                jal store_registers
+                addi $a0, $t3, 0
+                addi $a1, $t3, 0
+                jal set_board_by_addr
+                jal restore_registers
+            update_pill_structure_finish_update:
+         
+            addi $t1, $t1, 4
+            j update_pill_structure_inner_loop
+            
+        update_pill_structure_next_i:
+            addi $t0, $t0, 256
+            j update_pill_structure_outer_loop
+    update_pill_structure_end:
+        lw $ra, 0 ( $sp )
+        addi $sp, $sp, 4
+        jr $ra
+
+        
+# How gravity is going to work is we go thorugh each row from the bottom to the top
+# What, we check is if the values below are falling or non there. If they are falling or not there, the pill falls.
+gravity:
+    # Stack pointer allocation
+    addi $sp, $sp, -4
+    sw $ra, 0 ( $sp )
+gravity_start_loop:
+    add $t9, $zero $zero # This records whether we have move a specfic element down
+    
+    li $t0, 7288 # This acts as the i on the board
+    gravity_outer_loop:
+        blt $t0, 1912, gravity_end_loop
+        li $t1, 0 # This acts as the j on the board
+        gravity_inner_loop:
+            bge $t1, 60, gravity_next_i
+    
+            add $t2, $t1, $t0 # Holds i + j
+            add $t3, $t2, $s0 # Adds offset for the main page. This is the first pill to check
+            
+            # We first want to check if this place is even a wall or not. Basically, if it has value 2 or 0, it should not do anything
+            jal store_registers
+            addi $a0, $t3, 0
+            jal get_board_by_addr
+            jal restore_registers
+            
+            
+            beq $v0, 2, gravity_finish_inner_loop # Virus meaning we don't check
+            beq $v0, 0, gravity_finish_inner_loop # Empty space meaning we don't check
+            addi $t4, $v0, 0 # Pill 2 to check 
+
+            addi $t5, $t4, 256
+            addi $t6, $t3, 256 # Check the location bellow them
+            # Check if empty space for first location or if it's the pill
+            jal store_registers
+            addi $a0, $t5 0
+            jal get_board_by_addr
+            jal restore_registers
+            
+            beq $v0, 0, gravity_check_second
+            beq $v0, $t3, gravity_check_second
+            j gravity_finish_inner_loop
+            gravity_check_second:
+                # Check if empty space for second location or if it's the earlier pill
+                jal store_registers
+                addi $a0, $t6 0
+                jal get_board_by_addr # Get value there
+                jal restore_registers
+                
+                beq $v0, 0, gravity_move_down # Check if it's empty space
+                beq $v0, $t4, gravity_move_down # Check if this is pill 2 with pill 1 beloow it
+                j gravity_finish_inner_loop
+                gravity_move_down:
+                    # Indicate that a movement has changed
+                    addi $t9, $t9, 1
+                
+                    # Load color for $t3
+                    lw $t7, 0( $t3 )
+                    lw $t8, 0( $t4 )
+                    sw $t7, 0( $t6 )
+                    sw $t8, 0 ( $t5 )
+                    # Override earlier color
+                    la $t2, colors
+                    sw $t2, 0( $t3 )
+                    sw $t2, 0( $t4 )
+                    # Update the board for the new pill structure
+                    # First set the new pills structure below
+                    jal store_registers
+                    addi $a0, $t6, 0
+                    add $a1, $t5, $zero
+                    jal set_board_by_addr
+                    jal restore_registers
+                    
+                    jal store_registers
+                    addi $a0, $t5, 0
+                    add $a1, $t6, $zero
+                    jal set_board_by_addr
+                    jal restore_registers
+                    # Second, update the earlier pills area to be empty
+                    jal store_registers
+                    addi $a0, $t3, 0
+                    add $a1, $zero, $zero
+                    jal set_board_by_addr
+                    jal restore_registers
+                    
+                    jal store_registers
+                    addi $a0, $t4, 0
+                    add $a1, $zero, $zero
+                    jal set_board_by_addr
+                    jal restore_registers
+                    
+            gravity_finish_inner_loop:
+            
+            addi $t1, $t1, 4
+            j gravity_inner_loop
+        gravity_next_i:
+            addi $t0, $t0, -256
+            j gravity_outer_loop
+
+    gravity_end_loop:
+    
+    # Check if something has moved
+    beq $t9, 0, gravity_finish
+        # If something has changed, wait a second
+        li $v0, 32
+        li $a0, 1000
+        syscall
+        jal evaluate_board
+        j gravity_start_loop
+    
+    gravity_finish:
+
+    lw $ra, 0 ( $sp )
+    addi $sp, $sp, 4
+    jr $ra
 
 
 # Testing
