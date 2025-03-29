@@ -815,7 +815,12 @@ evaluate_outer_loop:
         add $t3, $t3, $s0
         lw $t5, 12( $t6 ) # Paint over the old stuff
         
-        
+        # Update the real board
+        jal store_registers
+        addi $a0, $t3, 0
+        addi $a1, $zero, 0
+        jal set_board_by_addr
+        jal restore_registers
         
         sw $t5, 0($t3)
         addi $t2, $t2, 1
