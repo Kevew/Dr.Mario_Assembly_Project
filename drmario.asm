@@ -313,7 +313,7 @@ game_loop:
     # How do I draw the current pill falling? I erase it at the beginning of the game_loop. After all the information is proessed, then I draw that one again the end
 	# Setting the current pill positions to black
     la $t3, colors
-    addi $t3, $t3, 12
+    lw $t3, 12( $t3 )
 	sw $t3, 0( $s3 )
     sw $t3, 0( $s4 )
 	
