@@ -973,8 +973,9 @@ gravity_start_loop:
             jal get_board_by_addr
             jal restore_registers
             
+            
             beq $v0, 0, gravity_check_second
-            beq $v0, $t3, gravity_check_second
+            beq $v0, $t4, gravity_check_second
             j gravity_finish_inner_loop
             gravity_check_second:
                 # Check if empty space for second location or if it's the earlier pill
@@ -984,7 +985,7 @@ gravity_start_loop:
                 jal restore_registers
                 
                 beq $v0, 0, gravity_move_down # Check if it's empty space
-                beq $v0, $t4, gravity_move_down # Check if this is pill 2 with pill 1 beloow it
+                beq $v0, $t3, gravity_move_down # Check if this is pill 2 with pill 1 beloow it
                 j gravity_finish_inner_loop
                 gravity_move_down:
                     # Indicate that a movement has changed
