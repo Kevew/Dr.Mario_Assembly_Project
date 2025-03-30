@@ -28,9 +28,14 @@ ADDR_KBRD:
 ROW_LENGTH:
     .word 64
 # Color list
-colors: .word 0x00ff00, 0xff0000, 0x0000ff, 0x000000  # Green, Red, Blue, Black
+colors: .word 0xffff00, 0xff0000, 0x0232ff, 0x000000  # Green, Red, Blue, Black
 # virus color
-VIRUS_COLORS: .word 0x028a0f, 0xd21404, 0x0442f6 # green, red, blue with a tint
+VIRUS_COLORS: .word 0xf0ff30, 0xd21404, 0x0442f6 # green, red, blue with a tint
+# counts to 1000
+GRAVITY_COUNTER: .word 0
+# ms before gravity pulls pill down
+GRAVITY_TIME: .word 100
+# game over display
 GAME_OVER_ARRAY:  .word
     0, -1, -1, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, 0, -1, 0, 0, -1, -1,
     -1, 0, 0, 0, 0, 0, -1, 0, -1, 0, -1, -1, 0, -1, -1, 0, -1, 0, 0,
@@ -103,7 +108,7 @@ main:
     addi $s3, $s0, 1684
     sw $s6, 0( $s3 )
     
-    
+    # draw the viruses
     jal virus_initializer
     jal virus_generate_loop
     
@@ -265,7 +270,6 @@ game_loop:
 	
 	# How do I draw the current pill falling? I erase it at the beginning of the game_loop. After all the information is proessed, then I draw that one again the end
 	# Setting the current pill positions to black
-      
     la $t3, colors
     addi $t3, $t3, 12
 	sw $t3, 0( $s3 )
@@ -279,8 +283,6 @@ game_loop:
 	
 	# Updates the screen to show new changes
     update_board:
-    
-    
 	sw $s5, 0( $s3 )
     sw $s6, 0( $s4 )
 	
@@ -288,9 +290,89 @@ game_loop:
 	li $v0, 32      # sleep
     li $a0, 1       # 1 milisecond
     syscall
+    
+    jal gravity
 	
     # 5. Go back to Step 1
     j game_loop
+    
+gravity:
+addi $sp, $sp, -4
+sw $ra, 0($sp)                  # save registers, return once gravity is done
+
+lw $t0, GRAVITY_COUNTER         # load counter (0)
+addi $t0, $t0, 1                # increment by 1
+sw $t0, GRAVITY_COUNTER
+lw $t1, GRAVITY_TIME
+blt $t0, $t1, game_loop         # only proceed if t0 == t1
+
+# if t0 >= t1,
+# reset gravity_counter
+li $t0, 0                       
+sw $t0, GRAVITY_COUNTER         # store 0 in gravity_counter
+
+# check if space below if horiozontal pill is occupied
+addi $t4, $s3, 4                # check if pill is horizontal
+bne $s4, $t4, vertical_gravity  
+addi $a0, $s3, 256              # check the row below pill 1
+jal get_board_by_addr
+bne $v0, $zero, freeze_pill     # lock pill in place if space below is occupied
+
+addi $a0, $s4, 256             # check the row below pill 2
+jal get_board_by_addr           # TODO: when i rotate pill, it is counting the bottom of pill1 as occupied since it used to be vertical so i need to find a way to update the pill occupation status before this
+bne $v0, $zero, freeze_pill     # lock pill in place if space below is occupied
+
+# pull horizontal pill down otherwise
+la $t3, colors
+addi $t3, $t3, 12
+sw $t3, 0( $s3 )
+sw $t3, 0( $s4 )
+addi $s3, $s3, 256
+addi $s4, $s4, 256
+lw $ra, 0($sp)
+addi $sp, $sp, 4
+j update_board
+
+vertical_gravity:
+addi $a0, $s3, 256              # check the row below pill 1, which is the bottom pill
+jal get_board_by_addr
+bne $v0, 0, freeze_pill         # lock pill in place if space below is occupied
+
+# pull vertical pill down otherwise
+la $t3, colors
+addi $t3, $t3, 12
+sw $t3, 0( $s3 )
+sw $t3, 0( $s4 )
+addi $s3, $s3, 256
+addi $s4, $s4, 256
+
+lw $ra, 0($sp)
+addi $sp, $sp, 4
+j update_board
+
+freeze_pill:
+# set pill locations as occupied
+addi $a0, $s3, 0                # a0 = bitmap location
+addi $a1, $zero, 1              # a1 = value to set
+jal set_board_by_addr
+addi $a0, $s4, 0                # a0 = bitmap location
+addi $a1, $zero, 1              # a1 = value to set
+jal set_board_by_addr
+jal generate_pill
+j update_board
+
+generate_pill:
+jal random_color
+addi $s4, $s0, 1428
+sw $s5, 0( $s4 )
+addi $s3, $s0, 1684
+sw $s6, 0( $s3 )
+
+# end game if pill is blocked
+addi $a0, $s3, 0
+jal get_board_by_addr
+bne $v0, 0, game_over
+j update_board
 
 # Ok, so a lot of my logic is based on the idea of converting the values of (1142) which is the memory address over to a more easier and manipulatable variable.
 # For example, 1912 would convert to (0,0) on the board. 
@@ -344,7 +426,7 @@ set_board_by_addr:
     sb $a1, 0 ($t8)            # Set value at the board
     
     lw $ra, 0($sp)             # Restore original return address
-    addi $sp, $sp, 4         # Free stack space
+    addi $sp, $sp, 4           # Free stack space
     jr $ra                     # Return to caller
     
 #--------------------------------------------------------------
@@ -358,8 +440,8 @@ get_board_by_addr:
 
     sub $a0, $a0, $s0
     jal addr_to_board
-    add $a0, $v0, $zero # X position of Pill 1 on board
-    add $a1, $v1, $zero # Y position of Pill 1 on board
+    add $a0, $v0, $zero      # X position of Pill 1 on board
+    add $a1, $v1, $zero      # Y position of Pill 1 on board
     jal get_val_at_board
     
     lw $ra, 0($sp)           # Restore original return address
@@ -367,11 +449,10 @@ get_board_by_addr:
     jr $ra                   # Return to caller
     
     
-    
 # Central function that handles all the keyboard inputs
 keybord_input: 
     lw $a0, 4($t0)                  # Load second word from keyboard
-    beq $a0, 0x20, respond_to_space # check if space bar was pressed
+    beq $a0, 0x70, respond_to_P     # check if space bar was pressed
     beq $a0, 0x71, respond_to_Q     # Check if the key 'q' was pressed
     beq $a0, 0x77, respond_to_W     # Check if the key 'w' was pressed
     beq $a0, 0x73, respond_to_S     # Check if the key 's' was pressed
@@ -381,14 +462,14 @@ keybord_input:
     j update_board
 
 # pauses game when called
-respond_to_space:
+respond_to_P:
     lw $t0, ADDR_KBRD                   # load keyboard addr
     lw $t1, 0($t0)                      # grab keyboard ready bit
-    beq $t1, $zero, respond_to_space    # loop until these 3 lines until something is pressed
+    beq $t1, $zero, respond_to_P        # loop until these 3 lines until something is pressed
     
     lw $t0, 4($t0)                      # Get the key value
-    lw $t1, 0x20                        # store space ascii in t1
-    bne $t0, $t1, respond_to_space      # loop until key pressed is space bar
+    lw $t1, 32                        # store 'p' ascii in t1
+    bne $t0, $t1, respond_to_P          # loop until key pressed is space bar
     
     jr $ra                              # if space bar is pressed, return to game_loop
 
@@ -496,6 +577,13 @@ respond_to_W:
     addi $a0, $s3, -256
     jal get_board_by_addr
     bne $v0, 0, finish_rotate
+    
+    # Clear old positions
+    la $t3, colors
+    addi $t3, $t3, 12
+    sw $t3, 0($s3)
+    sw $t3, 0($s4)
+    
     addi $s4, $s3, -256
     j finish_rotate
     # If the pill is currently vertical
@@ -504,6 +592,12 @@ respond_to_W:
         addi $a0, $s3, 4
         jal get_board_by_addr
         bne $v0, 0, finish_rotate
+
+        # Clear old positions
+        la $t3, colors
+        addi $t3, $t3, 12
+        sw $t3, 0($s3)
+        sw $t3, 0($s4)
         
         addi $s4, $s3, 4
         # Then we update the colour
@@ -518,8 +612,6 @@ respond_to_W:
 
 # generate viruses in random locations with random colors
 virus_initializer:
-
-    
     li $t1, 0               # loop counter = 0
     li $t9, 4               # make 4 viruses
     
