@@ -27,6 +27,8 @@ ADDR_KBRD:
 # How long each row in the bitmap is
 ROW_LENGTH:
     .word 64
+call_count: .word 0        # Call counter
+delay_counter: .word 100
 # Color list
 colors: .word 0xffff00, 0xd21404, 0x0442f6, 0x000000  # Yellow, Red, Blue, Black
 # Possible pill color
@@ -49,7 +51,7 @@ GAME_OVER_ARRAY:  .word
 arr: .space 5120
 # For testing purposes
 newline: .asciiz "\n"
-    
+
 ##############################################################################
 # Mutable Data
 
@@ -69,6 +71,7 @@ board: .space 1836 # 27 rows x 17 columns = 459 * 4 = 1836
 # Before beginning, here is some information for how I'm storing my data in the registers
 # $s0 = base address for display
 # $s1 = address to the board state
+# $s2 = record of the time till last time gravity was invoked.
 # $s3 = Pill 1 Position
 # $s4 = Pill 2 Position
 # For example: Say we have the pill like the following
@@ -81,13 +84,14 @@ board: .space 1836 # 27 rows x 17 columns = 459 * 4 = 1836
 # $s5 = Pill 1 Color
 # $s6 = Pill 2 Color
 # $s7 = Virus Color
-# $s8 = Can the player move? 0 - Player can move, 1 - Player cannot move as the map is still updating the falling pills
 
 
     # Run the game.
 main:
     lw $s0, ADDR_DSPL
     la $s1, board                     # Load in the basic board address to $s1
+    # Add in the inital time
+    add $s2, $zero, 100
     
     # Instantiate the board as filled with zeros.
     la $t0, board
@@ -314,6 +318,10 @@ game_loop:
 	sw $t3, 0( $s3 )
     sw $t3, 0( $s4 )
 	
+	# Handle the timer for respond_to_S
+    addi $s2, $s2, -1 # Decrement counter
+    blt $s2, $zero, call_respond # If zero or negative, call the function
+    
 	# Checks if a key has been pressed.
 	# If it has call keyboard_input
 	lw $t0, ADDR_KBRD 
@@ -335,6 +343,44 @@ game_loop:
 	
     # 5. Go back to Step 1
     j game_loop
+    
+    
+call_respond:
+    jal respond_to_S
+
+    # Track call count in memory
+    la $t0, call_count # Reuse $t0
+    lw $t1, 0($t0) # Load current count
+    addi $t1, $t1, 1
+    sw $t1, 0($t0) # Store back
+    
+    # Every 15 updates, increase the speed until it reaches every 10 miliseconds
+    li $t2, 15
+    blt $t1, $t2, maintain_delay
+    # Reset counter and decrease delay
+    sw $zero, 0($t0) # Reset call count
+    la $t0, delay_counter
+    lw $t1, 0($t0)
+    subi $t1, $t1, 15
+    li $t2, 20
+    bge $t1, $t2, update_delay
+    li $t1, 20 # Minimum delay
+update_delay:
+    sw $t1, 0($t0) # Store new delay
+
+maintain_delay:
+    # Load current delay into $s2
+    la $t0, delay_counter
+    lw $s2, 0($t0)
+    j update_board
+    
+store_delay:
+    sw $t1, 0($t0) 
+    move $s2, $t1 
+    j update_board
+
+    
+
 
 # Ok, so a lot of my logic is based on the idea of converting the values of (1142) which is the memory address over to a more easier and manipulatable variable.
 # For example, 1912 would convert to (0,0) on the board. 
@@ -445,6 +491,8 @@ respond_to_Q:
     
 # Moves Down the current pill
 respond_to_S:
+    addi $sp, $sp, -4         # Allocate space on the stack
+    sw $ra, 0($sp)            # Save the original return address
     # Check if current pill is horizontal or not
     addi $t4, $s3, 4                        # t4 is the address of second half of pill
     bne $s4, $t4, vertical_down_move        # if pill is vertical, jump to vert down move
@@ -475,7 +523,6 @@ respond_to_S:
         jal set_board_by_addr
         jal restore_registers
         
-        
         jal store_registers
         addi $a0, $s4, 0
         add $a1, $zero, $s3
@@ -485,9 +532,18 @@ respond_to_S:
         jal random_color
         addi $s4, $s0, 1428
         addi $s3, $s0, 1684
+        # Check game over        
+        jal store_registers
+        addi $a0, $s3, 0
+        jal get_board_by_addr
+        jal restore_registers
+        bne $v0, 0, respond_to_Q
+        
         jal evaluate_board
     finite_update_down_movement:
-    j update_board
+    lw $ra, 0($sp)            # Save the original return address
+    addi $sp, $sp, 4         # Allocate space on the stack
+    jr $ra
     
 # Move left the current pill
 respond_to_A:
@@ -1038,9 +1094,9 @@ gravity_start_loop:
     
     # Check if something has moved
     beq $t9, 0, gravity_finish
-        # If something has changed, wait a second
+        # If something has changed, wait a half a second
         li $v0, 32
-        li $a0, 1000
+        li $a0, 500
         syscall
         jal evaluate_board
         j gravity_start_loop
