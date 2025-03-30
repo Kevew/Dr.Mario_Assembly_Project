@@ -27,10 +27,13 @@ ADDR_KBRD:
 # How long each row in the bitmap is
 ROW_LENGTH:
     .word 64
+call_count: .word 0        # Call counter
+delay_counter: .word 100
 # Color list
-colors: .word 0xffff00, 0xff0000, 0x0232ff, 0x000000  # Green, Red, Blue, Black
+colors: .word 0xffff00, 0xd21404, 0x0442f6, 0x000000  # Yellow, Red, Blue, Black
+# Possible pill color
 # virus color
-VIRUS_COLORS: .word 0xf0ff30, 0xd21404, 0x0442f6 # green, red, blue with a tint
+VIRUS_COLORS: .word 0xffff00, 0xd21404, 0x0442f6 # yellow, red, blue with a tint
 # counts to 1000
 GRAVITY_COUNTER: .word 0
 # ms before gravity pulls pill down
@@ -49,14 +52,21 @@ GAME_OVER_ARRAY:  .word
     -1, 0, -1, 0, 0, -1, -1, -1, 0, 0, -1, 0, 0, 0, -1, 0, -1, 0, 0, 
     0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, -1, 0, -1, 0, 0, -1, 0, 
     
+# Extra temp storage. Think of it as like extra registers.
+arr: .space 5120
+# For testing purposes
+newline: .asciiz "\n"
+
 ##############################################################################
 # Mutable Data
 
 # State of the current board
 # Think of it as a 27x17 array.
+# If a index at a array is 2, then it's a virus
 # If a index at a array is 1, then it's a wall
 # If a index at a array is 0, then it's empty space
-board: .space 459 # 27 rows x 17 columns = 405
+.align 2             # Align to 4 bytes (2^2)
+board: .space 1836 # 27 rows x 17 columns = 459 * 4 = 1836
 ##############################################################################
 # Code
 ##############################################################################
@@ -66,6 +76,7 @@ board: .space 459 # 27 rows x 17 columns = 405
 # Before beginning, here is some information for how I'm storing my data in the registers
 # $s0 = base address for display
 # $s1 = address to the board state
+# $s2 = record of the time till last time gravity was invoked.
 # $s3 = Pill 1 Position
 # $s4 = Pill 2 Position
 # For example: Say we have the pill like the following
@@ -84,6 +95,8 @@ board: .space 459 # 27 rows x 17 columns = 405
 main:
     lw $s0, ADDR_DSPL
     la $s1, board                     # Load in the basic board address to $s1
+    # Add in the inital time
+    add $s2, $zero, 100
     
     # Instantiate the board as filled with zeros.
     la $t0, board
@@ -117,25 +130,65 @@ main:
 
 # This function sets $s5 and $s6 as two random colors.
 random_color: 
-    li $v0, 42              # Syscall for random number generation
+    # Generate a random number between 0 and 5
+    li $v0, 42 # Syscall for random number generation
     li $a0, 0               # Use generator ID 0 (default)
-    li $a1, 3               # Upper bound (exclusive): 3 (0, 1, or 2)
+    li $a1, 6 # Upper bound (exclusive): 6 (0..5)
     syscall
-    la $t3, colors          # Load color array in
-    sll $a0, $a0, 2
-    add $t3, $t3, $a0       # Calculate address of new color
-    lw $s5, 0( $t3 ) 
+    move $t0, $a0 # Result saved in $t0
+    la $t1, colors
     
-    li $v0, 42              # Syscall for random number generation
-    li $a0, 0               # Use generator ID 0 (default)
-    li $a1, 3               # Upper bound (exclusive): 3 (0, 1, or 2)
-    syscall
-    la $t3, colors          # Load color array in
-    sll $a0, $a0, 2
-    add $t3, $t3, $a0       # Calculate address of new color
-    lw $s6, 0( $t3 ) 
+    li $t5, 0
+    beq $t0, $t5, red_red
+
+    li $t5, 1
+    beq $t0, $t5, blue_blue
+
+    li $t5, 2
+    beq $t0, $t5, yellow_yellow
+
+    li $t5, 3
+    beq $t0, $t5, red_blue
+
+    li $t5, 4
+    beq $t0, $t5, red_yellow
+
+    li $t5, 5
+    beq $t0, $t5, blue_yellow
     
-    jr $ra
+red_red:
+    lw $s5, 4($t1) 
+    lw $s6, 4($t1) 
+    j exit_random
+    
+blue_blue:
+    lw $s5, 8($t1)
+    lw $s6, 8($t1)
+    j exit_random
+    
+yellow_yellow:
+    lw $s5, 0($t1)
+    lw $s6, 0($t1)
+    j exit_random
+
+red_blue:
+    lw $s5, 4($t1)
+    lw $s6, 8($t1)
+    j exit_random
+    
+red_yellow:
+    lw $s5, 4($t1)
+    lw $s6, 0($t1)
+    j exit_random
+
+blue_yellow:
+    lw $s5, 8($t1)
+    lw $s6, 0($t1)
+    
+exit_random:
+    jr   $ra          # Return to caller
+
+    
     
 # This function instializes the map boundaries
 instantiate_map: 
@@ -181,7 +234,7 @@ instantiate_map:
     
     # Draw the bottom row
     addi $t3, $zero, 7796 # t3 tracks the current location starting from the left
-    addi $t4, $zero, 7864 # t4 is the right part
+    addi $t4, $zero, 7860 # t4 is the right part
     wall_bottom:
         beq $t3, $t4, wall_bottom_end # Checks if reached the bottom yet.
         add $t5, $s0, $t3 # If it has not, update $t5 which is where we want to draw
@@ -261,20 +314,20 @@ instantiate_map:
 
 
 game_loop:
-    # 1a. Check if key has been pressed
-    # 1b. Check which key has been pressed
-    # 2a. Check for collisions
-	# 2b. Update locations (capsules)
-	# 3. Draw the screen
-	# 4. Sleep
-	
-	# How do I draw the current pill falling? I erase it at the beginning of the game_loop. After all the information is proessed, then I draw that one again the end
+    # The first thing in the game loop is to evaluate if gravity is currently being enforced. If so, we can't allow the player to be moving as of the present as we wait for the block to fall.
+    jal gravity
+
+    # How do I draw the current pill falling? I erase it at the beginning of the game_loop. After all the information is proessed, then I draw that one again the end
 	# Setting the current pill positions to black
     la $t3, colors
-    addi $t3, $t3, 12
+    lw $t3, 12( $t3 )
 	sw $t3, 0( $s3 )
     sw $t3, 0( $s4 )
 	
+	# Handle the timer for respond_to_S
+    addi $s2, $s2, -1 # Decrement counter
+    blt $s2, $zero, call_respond # If zero or negative, call the function
+    
 	# Checks if a key has been pressed.
 	# If it has call keyboard_input
 	lw $t0, ADDR_KBRD 
@@ -287,8 +340,8 @@ game_loop:
     sw $s6, 0( $s4 )
 	
 	# Pauses the program for 1 miliseconds
-	li $v0, 32      # sleep
-    li $a0, 1       # 1 milisecond
+	li $v0, 32
+    li $a0, 1
     syscall
     
     jal gravity
@@ -373,6 +426,43 @@ addi $a0, $s3, 0
 jal get_board_by_addr
 bne $v0, 0, game_over
 j update_board
+    
+call_respond:
+    jal respond_to_S
+
+    # Track call count in memory
+    la $t0, call_count # Reuse $t0
+    lw $t1, 0($t0) # Load current count
+    addi $t1, $t1, 1
+    sw $t1, 0($t0) # Store back
+    
+    # Every 15 updates, increase the speed until it reaches every 10 miliseconds
+    li $t2, 15
+    blt $t1, $t2, maintain_delay
+    # Reset counter and decrease delay
+    sw $zero, 0($t0) # Reset call count
+    la $t0, delay_counter
+    lw $t1, 0($t0)
+    subi $t1, $t1, 15
+    li $t2, 20
+    bge $t1, $t2, update_delay
+    li $t1, 20 # Minimum delay
+update_delay:
+    sw $t1, 0($t0) # Store new delay
+
+maintain_delay:
+    # Load current delay into $s2
+    la $t0, delay_counter
+    lw $s2, 0($t0)
+    j update_board
+    
+store_delay:
+    sw $t1, 0($t0) 
+    move $s2, $t1 
+    j update_board
+
+    
+
 
 # Ok, so a lot of my logic is based on the idea of converting the values of (1142) which is the memory address over to a more easier and manipulatable variable.
 # For example, 1912 would convert to (0,0) on the board. 
@@ -402,8 +492,9 @@ addr_to_board:
 get_val_at_board:
     mul $t8, $a0, 17
     add $t8, $t8, $a1 # Get the index in the board
+    sll $t8, $t8, 2       # Multiply cell index by 4 (since each cell is 4 bytes)
     add $t8, $t8, $s1 # Get the address on the board
-    lb $v0, 0 ($t8)
+    lw $v0, 0 ($t8)
     jr $ra
 
 # The two functions above finally allows us to define the next two functions. The first loads a value $a1 into the board at $a0. The second reads
@@ -422,8 +513,9 @@ set_board_by_addr:
     
     mul $t8, $t0, 17
     add $t8, $t8, $t1          # Get the index in the board
+    sll $t8, $t8, 2       # Multiply cell index by 4 (since each cell is 4 bytes)
     add $t8, $t8, $s1          # Get the address on the board
-    sb $a1, 0 ($t8)            # Set value at the board
+    sw $a1, 0 ($t8)            # Set value at the board
     
     lw $ra, 0($sp)             # Restore original return address
     addi $sp, $sp, 4           # Free stack space
@@ -475,15 +567,17 @@ respond_to_P:
 
 # Exits program when called
 respond_to_Q:
-    li $v0, 10                          # exit gracefully
+    li $v0, 10                      # Quit gracefully
     syscall
     
 # Moves Down the current pill
 respond_to_S:
+    addi $sp, $sp, -4         # Allocate space on the stack
+    sw $ra, 0($sp)            # Save the original return address
     # Check if current pill is horizontal or not
     addi $t4, $s3, 4                        # t4 is the address of second half of pill
     bne $s4, $t4, vertical_down_move        # if pill is vertical, jump to vert down move
-        # If the pill is currently horizontal, we need to check the bottom of pill 1 and 2
+        # If the pill is currently horizontal, this means we need to check the bottom of pill 1 and 2
         addi $a0, $s3, 256                  # go to addr of pixel under s3
         jal get_board_by_addr               # check if there is smth at that address
         bne $v0, 0, finite_no_down_movement # if addr is not empty, skip
@@ -492,15 +586,45 @@ respond_to_S:
         bne $v0, 0, finite_no_down_movement 
         j finite_down_movement              # else: go down
     vertical_down_move:
-        # If the pill is currently vertical, we need to check the bottom of pill 1
+        # If the pill is currently vertical, this means we need to check the bottom of pill 1
         addi $a0, $s3, 256                  # if block under is taken: skip
         jal get_board_by_addr
         bne $v0, 0, finite_no_down_movement 
     finite_down_movement:                   # shift both halves down one row
         addi $s3, $s3, 256
         addi $s4, $s4, 256
+        j finite_update_down_movement
     finite_no_down_movement:
-    j update_board
+        sw $s5, 0($s3)
+        sw $s6, 0($s4)
+        
+        jal store_registers
+        addi $a0, $s3, 0
+        add $a1, $zero, $s4
+        jal set_board_by_addr
+        jal restore_registers
+        
+        jal store_registers
+        addi $a0, $s4, 0
+        add $a1, $zero, $s3
+        jal set_board_by_addr
+        jal restore_registers
+    
+        jal random_color
+        addi $s4, $s0, 1428
+        addi $s3, $s0, 1684
+        # Check game over        
+        jal store_registers
+        addi $a0, $s3, 0
+        jal get_board_by_addr
+        jal restore_registers
+        bne $v0, 0, respond_to_Q
+        
+        jal evaluate_board
+    finite_update_down_movement:
+    lw $ra, 0($sp)            # Save the original return address
+    addi $sp, $sp, 4         # Allocate space on the stack
+    jr $ra
     
 # Move left the current pill
 respond_to_A:
@@ -591,22 +715,30 @@ respond_to_W:
         # Check if location to be updated is a wall or not
         addi $a0, $s3, 4
         jal get_board_by_addr
-        bne $v0, 0, finish_rotate
-
-        # Clear old positions
-        la $t3, colors
-        addi $t3, $t3, 12
-        sw $t3, 0($s3)
-        sw $t3, 0($s4)
-        
+        bne $v0, 0, rotate_h_l
         addi $s4, $s3, 4
         # Then we update the colour
         addi $t2, $s5, 0
         addi $s5, $s6, 0
         addi $s6, $t2, 0
+        j finish_rotate
+        rotate_h_l:
+            # In this case, try rotating the other way
+            addi $a0, $s3, -4
+            jal get_board_by_addr
+            bne $v0, 0, finish_rotate
+            addi $s3, $s3, -4
+            addi $s4, $s3, 4
+            # Then we update the colour
+            addi $t2, $s5, 0
+            addi $s5, $s6, 0
+            addi $s6, $t2, 0
     finish_rotate:
     j update_board
 
+# CREATE A FUNCTION THAT STORES/RESTORES ALL T REGISTERS FOR WHEN WE CALL FUNCTIONS
+# IMPLEMENT UPDATING THE BOARD SO THAT VIRUSES ARE 1 AND OTHER
+# PILLS ON THE BOARD ARE 1 SO THAT THEY DETECT COLLISION
 # MAYBE FOR NOW MAKE VIRUSES AND PILLS SAME COLOR
 # SO THAT DETECTING A FOUR IN A ROW IS EASIER
 
@@ -617,10 +749,8 @@ virus_initializer:
     
 virus_generate_loop:
     beq $t1, $t9, virus_end   # if $t1 == $t9, jump to virus_end
-    lw $t0, ADDR_DSPL
-    sw $t1, 0($t0)
-    # lui $t0, 0x1000           # Load upper 16 bits of 0x10008000
-    # ori $t0, $t0, 0x8000      # Load lower 16 bits of 0x10008000
+    lui $t0, 0x1000           # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000      # Load lower 16 bits of 0x10008000
     li $v0, 42                # rand generator for x-coord
     li $a0, 0                 # lower bound is 0
     li $a1, 15                # upper bound is 15
@@ -672,7 +802,7 @@ make_virus:
 # input:
 # a0 - bitmap addr of virus position
 set_virus_occupied:
-    addi $a1, $zero, 1
+    addi $a1, $zero, 2
     addi $sp, $sp, -4         # open up space on stack
     sw $ra, 0($sp)            # save the original return address
 
@@ -683,6 +813,7 @@ set_virus_occupied:
     
     mul $t8, $t0, 17
     add $t8, $t8, $t1          # get index
+    sll $t8, $t8, 2
     add $t8, $t8, $s1          # get address
     sb $a1, 0 ($t8)            # set value at the board
     
@@ -694,10 +825,10 @@ virus_end:
     j update_board
     
 game_over:
-    la $a0 GAME_OVER_ARRAY      # display the game over array. (TODO: when to exit gracefully)
+    la $a0 GAME_OVER_ARRAY
 
-store_registers:                # push all t registers onto stack 
-    addi $sp, $sp, -40          # allocate all space at once
+store_registers:            # push all t registers onto stack 
+    addi $sp, $sp, -40        
     sw $t0, 36($sp)
     sw $t1, 32($sp)
     sw $t2, 28($sp)
@@ -723,5 +854,353 @@ restore_registers:            # pop all t registers from stack (reverse order LI
     lw $t0, 36($sp)
     addi $sp, $sp, 40         # Deallocate all space at once
     jr $ra
+
+
+# evaluate_board:
+#   This subroutine scans the board from address offset 1912 to 7800.
+#   For each starting location (i + j), it first checks horizontally:
+#     - It counts consecutive cells (in steps of 4 bytes) with the same color.
+#     - If 4 or more are found, it stores all those cell addresses in arr.
+#   It then does a similar check vertically (in steps of 256 bytes).
+#   Finally, it goes through the collected addresses in arr and resets the board
+evaluate_board:
+    # $t0 will hold our "remove" counter (number of entries stored in arr)
+    addi $t9, $zero, 0 # remove = 0
+    # Outer loop: i from 1912 to 7544
+    li $t1, 1912
     
-    # TODO: IMPLEMENT (MOVE / CONNECT-4 / ROTATE) SOUNDS
+evaluate_outer_loop:
+    addi $sp, $sp, -4        # Allocate space on the stack
+    sw $ra, 0($sp)           # Save the original return address
+    bge $t1, 7800, evaluate_removal_phase  
+    # Inner loop: j from 0 to 60 
+    li $t2, 0 # t2 = j
+    evaluate_inner_loop:
+         bge $t2, 60, evaluate_next_i    
+         
+         # t3 represents current location j
+         add $t3, $t1, $t2 # i + j
+         add $t4, $t3, $s0
+         #load current board color
+         lw $t6, 0( $t4 ) # color of current i j on map
+         # Check if color is black
+         beq $t6, $zero, evaluate_skip_j
+         add $t7, $t3, 4
+         li $t8, 1 # horizontal count = 1
+         evaluate_horizontal_loop:
+             add $t5, $t1, 60 # This stores i + 60
+             bge $t7, $t5, evaluate_horiz_done
+             
+             add $t4, $t7, $s0 # Add offset
+             lw $t5, 0 ($t4)
+             bne $t5, $t6, evaluate_horiz_done # If color at t7 is the same color
+             
+             addi $t8, $t8, 1 # If it is, increase horizontal count
+             addi $t7, $t7, 4 # Move 4 more left
+             j evaluate_horizontal_loop
+         evaluate_horiz_done:
+            li $t5, 4 # load a constant 4 to check if statement
+            blt $t8, $t5, evaluate_horiz_skip
+
+            # Record horizontal removals
+            move $t8, $t3 # Reuse the $t8, as count is not needed yet
+            evaluate_horiz_store:
+                bge $t8, $t7, evaluate_horiz_store_done
+                la $t4, arr
+                sll $t5, $t9, 2 # New offset = remove * 4
+                add $t5, $t4, $t5 # Address in arr to store removal element
+                sw $t8, 0( $t5 ) # Store the removal offset
+                addi $t9, $t9, 1 # Increase removal
+                add $t8, $t8, 4 # k += 4
+                j evaluate_horiz_store
+            evaluate_horiz_store_done:
+         evaluate_horiz_skip:
+            # Start of the vertical check
+            add $t7, $t3, 256 # Check for the vertical pointer now
+            li $t8, 1 # Reset the count for the vertical stuff now
+            evaluate_vert_loop:
+                li $t5, 7800 # Boundary for vertical scan
+                bge $t7, $t5, evaluate_vert_done # Check if vertical went beyond 7544 yet.
+                
+                add $t4, $t7, $s0
+                lw $t5, 0 ( $t4 ) # load in the current color at the vertical location
+                bne $t5, $t6, evaluate_vert_done # Check color to original location
+                
+                addi $t8, $t8, 1 # If it is equal, increase horizontal count
+                addi $t7, $t7, 256 # Move 256 more down
+                j evaluate_vert_loop
+        evaluate_vert_done:
+            li $t5, 4
+            blt $t8, $t5, evaluate_vert_skip # Check if there was at least 4 colors with the same color
+            
+            add $t8, $t3, $zero # Start adding the new elements to the thing
+        evaluate_vert_store:
+            bge $t8, $t7, evaluate_vert_store_done
+            la $t4, arr
+            sll $t5, $t9, 2 # Convert to bytes
+            add $t5, $t4, $t5
+            sw $t8, 0($t5)
+            addi $t9, $t9, 1
+            add $t8, $t8, 256
+            j evaluate_vert_store
+        evaluate_vert_store_done:
+        evaluate_vert_skip:
+        evaluate_skip_j:
+            addi $t2, $t2, 4 # j += 4
+            j evaluate_inner_loop
+        evaluate_next_i:
+            addi $t1, $t1, 256 # i += 256
+            j evaluate_outer_loop
+    evaluate_removal_phase:
+        li $t2, 0 # This acts as i for the new loop at the end
+        la $t6, colors
+    evaluate_remove_loop:
+        bge $t2, $t9, finish_eval
+        
+        la $t4, arr # load arr base address
+        sll $t8, $t2, 2 # compute offset = t2 * 4
+        addu $t8, $t4, $t8 # effective address in arr
+        lw $t3, 0($t8) # t3 = board offset to remove
+        
+        add $t3, $t3, $s0
+        lw $t5, 12( $t6 ) # Paint over the old stuff
+        
+        # Update the real board
+        jal store_registers
+        addi $a0, $t3, 0
+        addi $a1, $zero, 0
+        jal set_board_by_addr
+        jal restore_registers
+        
+        sw $t5, 0($t3)
+        addi $t2, $t2, 1
+        j evaluate_remove_loop
+    finish_eval:
+        jal update_pill_structure
+        lw $ra, 0($sp)
+        addi $sp, $sp, 4
+        jr $ra
+# Here is a pseudo code of what evaluate_board does
+#arr[10000];
+#remove=0;
+#for(int i = 1912;i < 7544;i++){
+#    for(int j = 0;j < 60;j += 4){
+#       int location = i + j;
+#       color = board[location]
+#       if(color == 0) continue;
+#       location += 4;
+#       int count = 1;
+#       while(location < i + 60 && color == board[location]){
+#           count += 1;
+#       }
+#       if(count >= 4){
+#            for(int k = i + j;k < location;k+=4){
+#               arr[remove] = k;
+#            }
+#       }
+#       location = i + j;
+#       int count = 1;
+#       while(location < 7544 && color == board[location]){
+#           count += 1;
+#       }
+#       if(count >= 4){
+#            for(int k = i + j + 256;k < location;k+=256){
+#               arr[remove] = k;
+#            }
+#       }
+#    }
+#}
+#for(int i = 0;i < remove;i++){
+#   board[arr[remove]] = -1;
+#}
+# Then, update the pill structure locations
+
+# Correct pill structure after evaluate deletion:
+# Recall that a pill at (x,y) and (x+1,y), the board[x][y] = (x+1,y) (in numebr form)
+# This means that if (x+1,y) is deleted, then we need to update board[x][y] = (x,y)
+# What we do, is iterate over the board and check the pill thing at each location
+update_pill_structure:
+    addi $sp, $sp, -4
+    sw $ra, 0 ( $sp )
+    li $t0, 1912 # Hold i = 0
+    update_pill_structure_outer_loop:
+        bge $t0, 7800, update_pill_structure_end
+        li $t1, 0 # Hold j = 0
+        update_pill_structure_inner_loop:
+            bge $t1, 60, update_pill_structure_next_i
+            
+            add $t2, $t1, $t0 # Holds i + j
+            add $t3, $t2, $s0 # Adds offset for the main page
+            
+            # Check if this is a pill or not
+            # We first want to check if this place is even a wall or not. Basically, if it has value 2 or 0, it should not do anything
+            jal store_registers
+            addi $a0, $t3, 0
+            jal get_board_by_addr
+            jal restore_registers 
+            
+            beq $v0, 2, update_pill_structure_finish_update # Virus meaning we don't check
+            beq $v0, 0, update_pill_structure_finish_update # Empty space meaning we don't check
+
+            # Get the pill structure at the location
+            jal store_registers
+            addi $a0, $t3, 0
+            jal get_board_by_addr
+            jal restore_registers
+            
+            
+            jal store_registers
+            add $a0, $v0, $zero # pill structure we need to check
+            jal get_board_by_addr
+            jal restore_registers
+            # Pill to actually check
+            add $t4, $v0, $zero # t4 is the pill we want to check if it has been erased or not
+            # Check if the pill structure at that point has been erased or not
+            # If it has, set the pill structure so that it's just the current location
+            # If it has not, do nothing
+            beq $t4, $t3, update_pill_structure_finish_update 
+                # This is the case where the other pill has been erased, then we update the $t3 to point to itself meaning it's now a 1x1 pill instead of a 2x1 pill
+                jal store_registers
+                addi $a0, $t3, 0
+                addi $a1, $t3, 0
+                jal set_board_by_addr
+                jal restore_registers
+            update_pill_structure_finish_update:
+         
+            addi $t1, $t1, 4
+            j update_pill_structure_inner_loop
+            
+        update_pill_structure_next_i:
+            addi $t0, $t0, 256
+            j update_pill_structure_outer_loop
+    update_pill_structure_end:
+        lw $ra, 0 ( $sp )
+        addi $sp, $sp, 4
+        jr $ra
+
+        
+# How gravity is going to work is we go thorugh each row from the bottom to the top
+# What, we check is if the values below are falling or non there. If they are falling or not there, the pill falls.
+gravity:
+    # Stack pointer allocation
+    addi $sp, $sp, -4
+    sw $ra, 0 ( $sp )
+gravity_start_loop:
+    add $t9, $zero $zero # This records whether we have move a specfic element down
+    
+    li $t0, 7288 # This acts as the i on the board
+    gravity_outer_loop:
+        blt $t0, 1912, gravity_end_loop
+        li $t1, 0 # This acts as the j on the board
+        gravity_inner_loop:
+            bge $t1, 60, gravity_next_i
+    
+            add $t2, $t1, $t0 # Holds i + j
+            add $t3, $t2, $s0 # Adds offset for the main page. This is the first pill to check
+            
+            # We first want to check if this place is even a wall or not. Basically, if it has value 2 or 0, it should not do anything
+            jal store_registers
+            addi $a0, $t3, 0
+            jal get_board_by_addr
+            jal restore_registers
+            
+            
+            beq $v0, 2, gravity_finish_inner_loop # Virus meaning we don't check
+            beq $v0, 0, gravity_finish_inner_loop # Empty space meaning we don't check
+            addi $t4, $v0, 0 # Pill 2 to check 
+
+            addi $t5, $t4, 256
+            addi $t6, $t3, 256 # Check the location bellow them
+            # Check if empty space for first location or if it's the pill
+            jal store_registers
+            addi $a0, $t5 0
+            jal get_board_by_addr
+            jal restore_registers
+            
+            
+            beq $v0, 0, gravity_check_second
+            beq $v0, $t4, gravity_check_second
+            j gravity_finish_inner_loop
+            gravity_check_second:
+                # Check if empty space for second location or if it's the earlier pill
+                jal store_registers
+                addi $a0, $t6 0
+                jal get_board_by_addr # Get value there
+                jal restore_registers
+                
+                beq $v0, 0, gravity_move_down # Check if it's empty space
+                beq $v0, $t3, gravity_move_down # Check if this is pill 2 with pill 1 beloow it
+                j gravity_finish_inner_loop
+                gravity_move_down:
+                    # Indicate that a movement has changed
+                    addi $t9, $t9, 1
+                
+                    # Load color for $t3
+                    lw $t7, 0( $t3 )
+                    lw $t8, 0( $t4 )
+                    sw $t7, 0( $t6 )
+                    sw $t8, 0 ( $t5 )
+                    # Override earlier color
+                    la $t2, colors
+                    sw $t2, 0( $t3 )
+                    sw $t2, 0( $t4 )
+                    # Update the board for the new pill structure
+                    # First set the new pills structure below
+                    jal store_registers
+                    addi $a0, $t6, 0
+                    add $a1, $t5, $zero
+                    jal set_board_by_addr
+                    jal restore_registers
+                    
+                    jal store_registers
+                    addi $a0, $t5, 0
+                    add $a1, $t6, $zero
+                    jal set_board_by_addr
+                    jal restore_registers
+                    # Second, update the earlier pills area to be empty
+                    jal store_registers
+                    addi $a0, $t3, 0
+                    add $a1, $zero, $zero
+                    jal set_board_by_addr
+                    jal restore_registers
+                    
+                    jal store_registers
+                    addi $a0, $t4, 0
+                    add $a1, $zero, $zero
+                    jal set_board_by_addr
+                    jal restore_registers
+                    
+            gravity_finish_inner_loop:
+            
+            addi $t1, $t1, 4
+            j gravity_inner_loop
+        gravity_next_i:
+            addi $t0, $t0, -256
+            j gravity_outer_loop
+
+    gravity_end_loop:
+    
+    # Check if something has moved
+    beq $t9, 0, gravity_finish
+        # If something has changed, wait a half a second
+        li $v0, 32
+        li $a0, 500
+        syscall
+        jal evaluate_board
+        j gravity_start_loop
+    
+    gravity_finish:
+
+    lw $ra, 0 ( $sp )
+    addi $sp, $sp, 4
+    jr $ra
+
+
+# Testing
+add  $a0, $t3, $zero
+li    $v0, 1       # syscall to print integer
+syscall
+# Print newline:
+la    $a0, newline
+li    $v0, 4
+syscall
