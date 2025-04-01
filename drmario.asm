@@ -6,7 +6,7 @@
 #
 # We assert that the code submitted here is entirely our own 
 # creation, and will indicate otherwise when it is not.
-#
+
 ######################## Bitmap Display Configuration ########################
 # - Unit width in pixels:       64
 # - Unit height in pixels:      32
@@ -31,31 +31,67 @@ call_count: .word 0        # Call counter
 delay_counter: .word 100
 # Color list
 colors: .word 0xffff00, 0xd21404, 0x0442f6, 0x000000  # Yellow, Red, Blue, Black
-# Possible pill color
+# White
+white: .word 0xffffff
+black: .word 0x000000
 # virus color
 VIRUS_COLORS: .word 0xffff00, 0xd21404, 0x0442f6 # yellow, red, blue with a tint
 # counts to 1000
 GRAVITY_COUNTER: .word 0
 # ms before gravity pulls pill down
-GRAVITY_TIME: .word 100
+# Gravity speed settings (in milliseconds)
+GRAVITY_SPEEDS: .word 100, 80, 60  # Easy, Medium, Hard
+GRAVITY_SPEED:  .word 1              # Default to medium (index 1)
+delay_counter_easy: .word 100
+delay_counter_medium: .word 80
+delay_counter_hard: .word 60
+
+# level selection display
+NUMBERS_DISPLAY:
+    .word 
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+# paused display
+PAUSED_ARRAY:
+    .word 
+    0,0,0,1,1,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,1,1,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,1,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,1,0,0,0,1,0,1,0,1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,1,0,0,0,1,0,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 # game over display
-GAME_OVER_ARRAY:  .word
-    0, -1, -1, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, 0, -1, 0, 0, -1, -1,
-    -1, 0, 0, 0, 0, 0, -1, 0, -1, 0, -1, -1, 0, -1, -1, 0, -1, 0, 0,
-    -1, 0, -1, -1, -1, 0, -1, -1, -1, 0, -1, -1, -1, -1, -1, 0, -1, -1, 0,
-    -1, 0, 0, -1, 0, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 0,
-    0, -1, -1, 0, 0, 0, -1, 0, -1, 0, -1, 0, 0, 0, -1, 0, 0, -1, -1,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, -1, 0, 0, -1, 0, 0, 0, -1, 0, 0, -1, -1, 0, -1, -1, 0, 0, 0,
-    -1, 0, -1, 0, -1, -1, 0, -1, -1, 0, -1, 0, 0, 0, -1, 0, -1, 0, 0, 
-    -1, 0, -1, 0, 0, -1, 0, -1, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0
-    -1, 0, -1, 0, 0, -1, -1, -1, 0, 0, -1, 0, 0, 0, -1, 0, -1, 0, 0, 
-    0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, -1, 0, -1, 0, 0, -1, 0, 
-    
+GAME_OVER_ARRAY:
+    # Rows 1-8 are empty (64 * 8 = 512 pixels, 2048 bytes)
+    # Rows 9-23 (64 * 15 = 960 pixels, 3840 bytes) 
+    .word 
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,1,1,1,1,0,0,0,1,0,0,0,1,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,1,0,1,1,0,0,1,1,0,1,1,1,0,1,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,1,1,0,0,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,1,1,1,1,1,1,0,1,0,0,1,0,0,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,1,0,1,1,0,0,1,1,0,1,0,0,0,0,0,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,1,0,1,1,0,0,1,1,0,1,0,0,0,0,0,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,1,1,0,0,1,1,0,1,0,0,0,0,0,1,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,1,0,0,0,0,1,0,0,0,1,1,1,1,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,1,1,0,0,0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,1,1,0,0,1,1,0,1,1,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,1,1,1,1,0,0,1,1,1,1,1,1,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1,1,1,0,0,1,1,0,0,0,0,0,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,1,0,0,0,0,0,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,1,0,1,1,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,1,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,1,0,0,1,1,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,1
 # Extra temp storage. Think of it as like extra registers.
 arr: .space 5120
 # For testing purposes
 newline: .asciiz "\n"
+# Sound system constants
+pitch: .byte 69
+duration: .byte 100
+instrument: .byte 58
+volume: .byte 100
 
 ##############################################################################
 # Mutable Data
@@ -93,6 +129,7 @@ board: .space 1836 # 27 rows x 17 columns = 459 * 4 = 1836
 
     # Run the game.
 main:
+    
     lw $s0, ADDR_DSPL
     la $s1, board                     # Load in the basic board address to $s1
     # Add in the inital time
@@ -110,6 +147,7 @@ main:
         j set_zero_board              # Repeat
     exit_zero_board:
 
+    jal show_menu 
     
     # Initialize the game
     jal instantiate_map # Save return address at $ra and calls instantiate map to build map
@@ -127,13 +165,88 @@ main:
     
     j game_loop
     
+show_menu:
+    addi $sp, $sp, -4        # Allocate space on the stack
+    sw $ra, 0($sp)           # Save the original return address
+    jal black_out
+    lui $t0, 0x1000             # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000        # Load lower 16 bits of 0x10008000
+    addi $t0, $t0, 3328         # skip to row 13
+    la $t1, NUMBERS_DISPLAY
+    li $t3, 1                   # pixel counter
+    li $t4, 320                 # pixels in 5 rows
+    j draw_menu_loop
+    
+draw_menu_loop:
+    lw $t2, 0($t1)              # load value from array (0 = skip, 1 = fill)
+    beq $t2, 1, draw_menu_white # if 1, fill w white
+    j continue_menu_loop        # otherwise skip
+
+draw_menu_white:
+    jal draw_white           # Call draw_white subroutine
+    j continue_menu_loop     # Continue after returning
+
+draw_white:
+    addi $sp, $sp, -4        # Allocate stack space
+    sw $ra, 0($sp)           # Save return address
+    
+    lw $t6, white            # Load white color
+    sw $t6, 0($t0)           # Draw white pixel
+    
+    lw $ra, 0($sp)           # Restore $t0
+    addi $sp, $sp, 4         # Free stack space
+    jr $ra                   # Return to caller
+
+continue_menu_loop:
+    addi $t0, $t0, 4            # next pixel in display
+    addi $t1, $t1, 4            # next value in array 
+    addi $t3, $t3, 1            # increment counter 
+    bne $t3, $t4, draw_menu_loop
+    
+    # Wait for valid input (1-3)
+    wait_for_input:
+        la $t4, GRAVITY_SPEEDS
+        lw $t0, ADDR_KBRD
+        lw $t1, 0($t0)                      # Read keyboard ready bit
+        beq $t1, $zero, wait_for_input      # loop until a key is pressed
+        lw $t0, 4($t0)                      # Get the key value
+        
+        # Check input
+        li $t3, 0x31
+        beq $t0, $t3 set_easy
+        li $t3, 0x32
+        beq $t0, $t3 set_medium
+        li $t3, 0x33
+        beq $t0, $t3 set_hard
+        j wait_for_input      # Invalid input, try again
+    
+    set_easy:
+        li $t0, 0
+        sw $t0, GRAVITY_SPEED
+        j menu_done
+        
+    set_medium:
+        li $t0, 1
+        sw $t0, GRAVITY_SPEED
+        j menu_done
+        
+    set_hard:
+        li $t0, 2
+        sw $t0, GRAVITY_SPEED
+        j menu_done                 # not technically necessary but good to have
+        
+    menu_done:
+        jal black_out
+        lw $ra, 0($sp)           # Restore original return address
+        addi $sp, $sp, 4         # Free stack space
+        jr $ra
 
 # This function sets $s5 and $s6 as two random colors.
 random_color: 
     # Generate a random number between 0 and 5
     li $v0, 42 # Syscall for random number generation
-    li $a0, 0               # Use generator ID 0 (default)
-    li $a1, 6 # Upper bound (exclusive): 6 (0..5)
+    li $a0, 0  # Use generator ID 0 (default)
+    li $a1, 6  # Upper bound (exclusive): 6 (0..5)
     syscall
     move $t0, $a0 # Result saved in $t0
     la $t1, colors
@@ -187,8 +300,6 @@ blue_yellow:
     
 exit_random:
     jr   $ra          # Return to caller
-
-    
     
 # This function instializes the map boundaries
 instantiate_map: 
@@ -349,83 +460,99 @@ game_loop:
     # 5. Go back to Step 1
     j game_loop
     
-gravity:
-addi $sp, $sp, -4
-sw $ra, 0($sp)                  # save registers, return once gravity is done
+# gravity:
+# addi $sp, $sp, -4
+# sw $ra, 0($sp)                  # save registers, return once gravity is done
 
-lw $t0, GRAVITY_COUNTER         # load counter (0)
-addi $t0, $t0, 1                # increment by 1
-sw $t0, GRAVITY_COUNTER
-lw $t1, GRAVITY_TIME
-blt $t0, $t1, game_loop         # only proceed if t0 == t1
+# lw $t0, GRAVITY_COUNTER         # load counter (0)
+# addi $t0, $t0, 1                # increment by 1
+# sw $t0, GRAVITY_COUNTER
+# lw $t1, GRAVITY_TIME
+# blt $t0, $t1, game_loop         # only proceed if t0 == t1
 
-# if t0 >= t1,
-# reset gravity_counter
-li $t0, 0                       
-sw $t0, GRAVITY_COUNTER         # store 0 in gravity_counter
+# # if t0 >= t1,
+# # reset gravity_counter
+# li $t0, 0                       
+# sw $t0, GRAVITY_COUNTER         # store 0 in gravity_counter
 
-# check if space below if horiozontal pill is occupied
-addi $t4, $s3, 4                # check if pill is horizontal
-bne $s4, $t4, vertical_gravity  
-addi $a0, $s3, 256              # check the row below pill 1
-jal get_board_by_addr
-bne $v0, $zero, freeze_pill     # lock pill in place if space below is occupied
+# # check if space below if horiozontal pill is occupied
+# addi $t4, $s3, 4                # check if pill is horizontal
+# bne $s4, $t4, vertical_gravity  
+# addi $a0, $s3, 256              # check the row below pill 1
+# jal get_board_by_addr
+# bne $v0, $zero, freeze_pill     # lock pill in place if space below is occupied
 
-addi $a0, $s4, 256             # check the row below pill 2
-jal get_board_by_addr           # TODO: when i rotate pill, it is counting the bottom of pill1 as occupied since it used to be vertical so i need to find a way to update the pill occupation status before this
-bne $v0, $zero, freeze_pill     # lock pill in place if space below is occupied
+# addi $a0, $s4, 256             # check the row below pill 2
+# jal get_board_by_addr           # TODO: when i rotate pill, it is counting the bottom of pill1 as occupied since it used to be vertical so i need to find a way to update the pill occupation status before this
+# bne $v0, $zero, freeze_pill     # lock pill in place if space below is occupied
 
-# pull horizontal pill down otherwise
-la $t3, colors
-addi $t3, $t3, 12
-sw $t3, 0( $s3 )
-sw $t3, 0( $s4 )
-addi $s3, $s3, 256
-addi $s4, $s4, 256
-lw $ra, 0($sp)
-addi $sp, $sp, 4
-j update_board
+# # pull horizontal pill down otherwise
+# la $t3, colors
+# addi $t3, $t3, 12
+# sw $t3, 0( $s3 )
+# sw $t3, 0( $s4 )
+# addi $s3, $s3, 256
+# addi $s4, $s4, 256
+# lw $ra, 0($sp)
+# addi $sp, $sp, 4
+# j update_board
 
-vertical_gravity:
-addi $a0, $s3, 256              # check the row below pill 1, which is the bottom pill
-jal get_board_by_addr
-bne $v0, 0, freeze_pill         # lock pill in place if space below is occupied
+# vertical_gravity:
+# addi $a0, $s3, 256              # check the row below pill 1, which is the bottom pill
+# jal get_board_by_addr
+# bne $v0, 0, freeze_pill         # lock pill in place if space below is occupied
 
-# pull vertical pill down otherwise
-la $t3, colors
-addi $t3, $t3, 12
-sw $t3, 0( $s3 )
-sw $t3, 0( $s4 )
-addi $s3, $s3, 256
-addi $s4, $s4, 256
+# # pull vertical pill down otherwise
+# la $t3, colors
+# addi $t3, $t3, 12
+# sw $t3, 0( $s3 )
+# sw $t3, 0( $s4 )
+# addi $s3, $s3, 256
+# addi $s4, $s4, 256
 
-lw $ra, 0($sp)
-addi $sp, $sp, 4
-j update_board
+# lw $ra, 0($sp)
+# addi $sp, $sp, 4
+# j update_board
 
-freeze_pill:
-# set pill locations as occupied
-addi $a0, $s3, 0                # a0 = bitmap location
-addi $a1, $zero, 1              # a1 = value to set
-jal set_board_by_addr
-addi $a0, $s4, 0                # a0 = bitmap location
-addi $a1, $zero, 1              # a1 = value to set
-jal set_board_by_addr
-jal generate_pill
-j update_board
+# freeze_pill:
+# # set pill locations as occupied
+# addi $a0, $s3, 0                # a0 = bitmap location
+# addi $a1, $zero, 1              # a1 = value to set
+# jal set_board_by_addr
+# addi $a0, $s4, 0                # a0 = bitmap location
+# addi $a1, $zero, 1              # a1 = value to set
+# jal set_board_by_addr
+# jal generate_pill
+# j update_board
 
-generate_pill:
-jal random_color
-addi $s4, $s0, 1428
-sw $s5, 0( $s4 )
-addi $s3, $s0, 1684
-sw $s6, 0( $s3 )
+# generate_pill:
+# jal random_color
+# addi $s4, $s0, 1428
+# sw $s5, 0( $s4 )
+# addi $s3, $s0, 1684
+# sw $s6, 0( $s3 )
 
-# end game if pill is blocked
-addi $a0, $s3, 0
-jal get_board_by_addr
-bne $v0, 0, game_over
-j update_board
+# # end game if pill is blocked
+# addi $a0, $s3, 0
+# jal get_board_by_addr
+# bne $v0, 0, game_over
+# j update_board
+
+# response to user level selection
+respond_to_1:  # Easy speed
+    li $t0, 0
+    sw $t0, GRAVITY_SPEED
+    j update_board
+
+respond_to_2:  # Medium speed
+    li $t0, 1
+    sw $t0, GRAVITY_SPEED
+    j update_board
+
+respond_to_3:  # Hard speed
+    li $t0, 2
+    sw $t0, GRAVITY_SPEED
+    j update_board
     
 call_respond:
     jal respond_to_S
@@ -460,9 +587,6 @@ store_delay:
     sw $t1, 0($t0) 
     move $s2, $t1 
     j update_board
-
-    
-
 
 # Ok, so a lot of my logic is based on the idea of converting the values of (1142) which is the memory address over to a more easier and manipulatable variable.
 # For example, 1912 would convert to (0,0) on the board. 
@@ -539,31 +663,131 @@ get_board_by_addr:
     lw $ra, 0($sp)           # Restore original return address
     addi $sp, $sp, 4         # Free stack space
     jr $ra                   # Return to caller
+ 
+#play a beep every time you shift the pill somewhere
+play_beep:
+    # Play a short beep sound
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)            # Save return address
+    jal store_registers
     
+    li $v0, 31 
+    la $t0, pitch
+    la $t1, duration 
+    la $t2, instrument
+    la $t3, volume 
+    move $a0, $t0 
+    move $a1, $t1 
+    move $a2, $t2
+    move $a3, $t3 
+    syscall
     
+    jal restore_registers
+    lw $ra, 0($sp)            # Restore return address
+    addi $sp, $sp, 4
+    jr $ra
+  
 # Central function that handles all the keyboard inputs
 keybord_input: 
     lw $a0, 4($t0)                  # Load second word from keyboard
     beq $a0, 0x70, respond_to_P     # check if space bar was pressed
     beq $a0, 0x71, respond_to_Q     # Check if the key 'q' was pressed
-    beq $a0, 0x77, respond_to_W     # Check if the key 'w' was pressed
-    beq $a0, 0x73, respond_to_S     # Check if the key 's' was pressed
+    beq $a0, 0x77, play_sound_W     # Check if the key 'w' was pressed
+    beq $a0, 0x73, play_sound_S     # Check if the key 's' was pressed
 
-    beq $a0, 0x61, respond_to_A     # Check if the key 'a' was pressed
-    beq $a0, 0x64, respond_to_D     # Check if the key 'd' was pressed
+    beq $a0, 0x61, play_sound_A     # Check if the key 'a' was pressed
+    beq $a0, 0x64, play_sound_D     # Check if the key 'd' was pressed
     j update_board
 
 # pauses game when called
 respond_to_P:
-    lw $t0, ADDR_KBRD                   # load keyboard addr
-    lw $t1, 0($t0)                      # grab keyboard ready bit
-    beq $t1, $zero, respond_to_P        # loop until these 3 lines until something is pressed
+    show_paused:
+    lui $t0, 0x1000             # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000        # Load lower 16 bits of 0x10008000
+    addi $t0, $t0, 1792         # skip to row 13
+    la $t1, PAUSED_ARRAY
+    li $t3, 1                   # pixel counter
+    li $t4, 320                 # pixels in 5 rows
+    j draw_paused_loop
     
-    lw $t0, 4($t0)                      # Get the key value
-    lw $t1, 32                        # store 'p' ascii in t1
-    bne $t0, $t1, respond_to_P          # loop until key pressed is space bar
+draw_paused_loop:
+    lw $t2, 0($t1)                      # load value from array (0 = skip, 1 = fill)
+    beq $t2, 1, draw_paused_white       # if 1, fill w white
+    j continue_paused_loop              # otherwise skip
+
+paused_wait:
+    lw $t0, ADDR_KBRD
+    lw $t1, 0($t0)                      # Read keyboard ready bit
+    beq $t1, $zero, paused_wait          # loop until a key is pressed
+    lw $a0, 4($t0)                      # Get the key value
     
-    jr $ra                              # if space bar is pressed, return to game_loop
+    lw $a0, 4($t0)                      # Get the key value
+    li $t1, 0x70                        # store 'p' ascii in t1
+    bne $a0, $t1, respond_to_P          # loop until key pressed is space bar
+    
+    j resume                       # if space bar is pressed, return to game_loop
+
+draw_paused_white:
+    jal draw_white           # Call draw_white subroutine
+
+continue_paused_loop:
+    addi $t0, $t0, 4            # next pixel in display
+    addi $t1, $t1, 4            # next value in array 
+    addi $t3, $t3, 1            # increment counter 
+    blt $t3, $t4, draw_paused_loop
+    j paused_wait
+
+resume:
+    lui $t0, 0x1000             # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000        # Load lower 16 bits of 0x10008000
+    addi $t0, $t0, 1792         # skip to row 13
+    la $t1, PAUSED_ARRAY
+    li $t3, 1                   # pixel counter
+    li $t4, 320                 # pixels in 5 rows
+    j resume_loop
+    
+resume_loop:
+    lw $t2, 0($t1)                      # load value from array (0 = skip, 1 = fill)
+    beq $t2, 1, draw_resume_black       # if 1, fill w black
+    j continue_resume_loop              # otherwise skip
+    
+draw_resume_black:
+    jal draw_resume_black_loop      # Call draw_black subroutine
+    j continue_resume_loop     # Continue after returning
+
+draw_resume_black_loop:
+    addi $sp, $sp, -4        # Allocate stack space
+    sw $ra, 0($sp)           # Save return address
+    
+    lw $t6, black            # Load black color
+    sw $t6, 0($t0)           # Draw black pixel
+    
+    lw $ra, 0($sp)           # Restore $t0
+    addi $sp, $sp, 4         # Free stack space
+    jr $ra                   # Return to caller
+
+continue_resume_loop:
+    addi $t0, $t0, 4            # next pixel in display
+    addi $t1, $t1, 4            # next value in array 
+    addi $t3, $t3, 1            # increment counter 
+    blt $t3, $t4, resume_loop
+    j game_loop
+
+play_sound_W:
+    jal play_beep
+    j respond_to_W
+
+play_sound_A:
+    jal play_beep
+    j respond_to_A
+    
+play_sound_S:
+    jal play_beep
+    j respond_to_S
+
+play_sound_D:
+    jal play_beep
+    j respond_to_D
 
 # Exits program when called
 respond_to_Q:
@@ -580,16 +804,16 @@ respond_to_S:
         # If the pill is currently horizontal, this means we need to check the bottom of pill 1 and 2
         addi $a0, $s3, 256                  # go to addr of pixel under s3
         jal get_board_by_addr               # check if there is smth at that address
-        bne $v0, 0, finite_no_down_movement # if addr is not empty, skip
+        bne $v0, 0, finite_no_down_movement # if addr is not empty, don't go down
         addi $a0, $s4, 256                  # repeat process for second half of pill
         jal get_board_by_addr
-        bne $v0, 0, finite_no_down_movement 
+        bne $v0, 0, finite_no_down_movement # if addr is not empty, don't go down
         j finite_down_movement              # else: go down
     vertical_down_move:
         # If the pill is currently vertical, this means we need to check the bottom of pill 1
         addi $a0, $s3, 256                  # if block under is taken: skip
         jal get_board_by_addr
-        bne $v0, 0, finite_no_down_movement 
+        bne $v0, 0, finite_no_down_movement # 
     finite_down_movement:                   # shift both halves down one row
         addi $s3, $s3, 256
         addi $s4, $s4, 256
@@ -618,12 +842,13 @@ respond_to_S:
         addi $a0, $s3, 0
         jal get_board_by_addr
         jal restore_registers
-        bne $v0, 0, respond_to_Q
+        bne $v0, 0, game_over
         
         jal evaluate_board
+        
     finite_update_down_movement:
     lw $ra, 0($sp)            # Save the original return address
-    addi $sp, $sp, 4         # Allocate space on the stack
+    addi $sp, $sp, 4          # Allocate space on the stack
     jr $ra
     
 # Move left the current pill
@@ -825,7 +1050,88 @@ virus_end:
     j update_board
     
 game_over:
-    la $a0 GAME_OVER_ARRAY
+    jal white_out
+    lui $t0, 0x1000             # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000        # Load lower 16 bits of 0x10008000
+    addi $t0, $t0, 2048         # skip to row 9
+    la $t1, GAME_OVER_ARRAY
+    li $t3, 1                   # pixel counter
+    li $t4, 960                 # pixels in rows 9-23
+    j draw_game_over_loop
+    
+draw_game_over_loop:
+    lw $t2, 0($t1)              # load value from array (0 = skip, 1 = fill)
+    beq $t2, 1, draw_black      # if 1, fill w black
+    j continue_loop             # otherwise skip
+
+draw_black:
+    jal draw_black_loop         # Call draw_black subroutine
+    j continue_loop             # Continue after returning
+
+draw_black_loop:
+    addi $sp, $sp, -4        # Allocate stack space
+    sw $ra, 0($sp)           # Save return address
+    
+    lw $t6, black            # Load white color
+    sw $t6, 0($t0)           # Draw white pixel
+    
+    lw $ra, 0($sp)           # Restore $t0
+    addi $sp, $sp, 4         # Free stack space
+    jr $ra                   # Return to caller
+
+continue_loop:
+    addi $t0, $t0, 4            # next pixel in display
+    addi $t1, $t1, 4            # next value in array 
+    addi $t3, $t3, 1            # increment counter 
+    bne $t3, $t4, draw_game_over_loop
+    j wait_for_R 
+
+wait_for_R:
+    lw $t0, ADDR_KBRD
+    lw $t1, 0($t0)                      # Read keyboard ready bit
+    beq $t1, $zero, wait_for_R          # loop until a key is pressed
+    lw $a0, 4($t0)                      # Get the key value
+        
+    # Check input
+    beq $a0, 0x72, respond_to_R
+    beq $a0, 0x71, respond_to_Q
+    j wait_for_R      # Invalid input, try again
+
+respond_to_R:
+    j main
+    
+# ISSUE: when retrying game, pill freezes like 3 blocks after starting to go down
+
+black_out:
+    lui $t0, 0x1000           # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000      # Load lower 16 bits of 0x10008000
+    li $t1, 0x1000A000      # end addr of bitmap
+    li $t2, 0        # load white
+    black_out_loop:
+    sw $t2, 0($t0)                      # draw pixel white
+    addi $t0, $t0, 4                    # increment by one pixel
+    bne $t0, $t1, black_out_loop        # loop until t0 reaches end address
+    jr $ra
+    
+white_out:
+    lui $t0, 0x1000           # Load upper 16 bits of 0x10008000
+    ori $t0, $t0, 0x8000      # Load lower 16 bits of 0x10008000
+    li $t1, 0x1000A000      # end addr of bitmap
+    li $t2, 0xffffff        # load white
+    white_out_loop:
+        sw $t2, 0($t0)                      # draw pixel white
+        addi $t0, $t0, 4                    # increment by one pixel
+        # sleep for 20ms between each row
+        sub $t7, $t0, $t6         # calculate current offset
+        andi $t7, $t7, 0xff       # 0xFF = 255 in decimal
+        bnez $t7, skip_sleep      # if not end of row skip sleep
+        li $v0, 32                # sleep
+        li $a0, 20                # 20ms
+        syscall
+
+    skip_sleep:
+        bne $t0, $t1, white_out_loop        # loop until t0 reaches end address
+        jr $ra
 
 store_registers:            # push all t registers onto stack 
     addi $sp, $sp, -40        
@@ -1078,7 +1384,6 @@ update_pill_structure:
         addi $sp, $sp, 4
         jr $ra
 
-        
 # How gravity is going to work is we go thorugh each row from the bottom to the top
 # What, we check is if the values below are falling or non there. If they are falling or not there, the pill falls.
 gravity:
