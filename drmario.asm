@@ -657,16 +657,28 @@ game_loop:
 respond_to_1:  # Easy speed
     li $t0, 0
     sw $t0, GRAVITY_SPEED
+    # Initialize counter with easy speed (100)
+    la $t1, GRAVITY_SPEEDS
+    lw $t2, 0($t1)        # Load easy speed (100)
+    sw $t2, GRAVITY_COUNTER
     j update_board
 
 respond_to_2:  # Medium speed
     li $t0, 1
     sw $t0, GRAVITY_SPEED
+    # Initialize counter with medium speed (80)
+    la $t1, GRAVITY_SPEEDS
+    lw $t2, 4($t1)        # Load medium speed (80)
+    sw $t2, GRAVITY_COUNTER
     j update_board
 
 respond_to_3:  # Hard speed
     li $t0, 2
     sw $t0, GRAVITY_SPEED
+    # Initialize counter with hard speed (60)
+    la $t1, GRAVITY_SPEEDS
+    lw $t2, 8($t1)        # Load hard speed (60)
+    sw $t2, GRAVITY_COUNTER
     j update_board
     
 call_respond:
@@ -1409,7 +1421,7 @@ continue_loop:
     bne $t3, $t4, draw_game_over_loop
     j wait_for_R 
 
-wait_for_R:
+wait_for_R:                             # wait for R for retry or Q for quit
     lw $t0, ADDR_KBRD
     lw $t1, 0($t0)                      # Read keyboard ready bit
     beq $t1, $zero, wait_for_R          # loop until a key is pressed
@@ -1418,9 +1430,41 @@ wait_for_R:
     # Check input
     beq $a0, 0x72, respond_to_R
     beq $a0, 0x71, respond_to_Q
-    j wait_for_R      # Invalid input, try again
+    j wait_for_R                        # if not Q or R, try again
 
 respond_to_R:
+    jal black_out
+    
+    # now, reset all game variables.
+    la $t0, call_count
+    sw $zero, 0($t0)
+    
+    la $t0, GRAVITY_COUNTER
+    sw $zero, 0($t0)
+    
+    la $t0, base_time       # reset music to start as well
+    sw $zero, 0($t0)
+    la $t0, noteIndex
+    sw $zero, 0($t0)
+    
+    la $t0, board           # wipe out board state
+    li $t1, 1836            # Size of board array
+clear_board_loop:
+    beqz $t1, board_cleared
+    sw $zero, 0($t0)
+    addi $t0, $t0, 4
+    addi $t1, $t1, -4
+    j clear_board_loop
+board_cleared:
+
+    # zero out all virus positions and colors
+    la $t0, VIRUS_DISPLAY_COLORS
+    sw $zero, 0($t0)
+    sw $zero, 4($t0)
+    sw $zero, 8($t0)
+    sw $zero, 12($t0)
+
+    # clear all registers
     li $s0, 0
     li $s1, 0
     li $s2, 0
@@ -1441,15 +1485,21 @@ respond_to_R:
     li $t5, 0
     li $t6, 0
     li $t7, 0
-    j main
-    
-# ISSUE: when retrying game, pill freezes like 3 blocks after starting to go down
+    li $t8, 0
+    li $t9, 0
+    li $v0, 0
+    li $v1, 0
 
+    li $v0, 32        # add a bit of delay so that its not shocking
+    li $a0, 100       # 100ms delay
+    syscall
+    j main            # restart entire game from menu screen
+    
 black_out:
     lui $t0, 0x1000           # Load upper 16 bits of 0x10008000
     ori $t0, $t0, 0x8000      # Load lower 16 bits of 0x10008000
-    li $t1, 0x1000A000      # end addr of bitmap
-    li $t2, 0        # load white
+    li $t1, 0x1000A000        # end addr of bitmap
+    li $t2, 0                 # load white
     black_out_loop:
     sw $t2, 0($t0)                      # draw pixel white
     addi $t0, $t0, 4                    # increment by one pixel
@@ -1459,8 +1509,8 @@ black_out:
 white_out:
     lui $t0, 0x1000           # Load upper 16 bits of 0x10008000
     ori $t0, $t0, 0x8000      # Load lower 16 bits of 0x10008000
-    li $t1, 0x1000A000      # end addr of bitmap
-    li $t2, 0xffffff        # load white
+    li $t1, 0x1000A000        # end addr of bitmap
+    li $t2, 0xffffff          # load white
     white_out_loop:
         sw $t2, 0($t0)                      # draw pixel white
         addi $t0, $t0, 4                    # increment by one pixel
@@ -1471,12 +1521,11 @@ white_out:
         li $v0, 32                # sleep
         li $a0, 20                # 20ms
         syscall
-
     skip_sleep:
         bne $t0, $t1, white_out_loop        # loop until t0 reaches end address
         jr $ra
 
-store_registers:            # push all t registers onto stack 
+store_registers:            # push all t registers onto stack
     addi $sp, $sp, -40        
     sw $t0, 36($sp)
     sw $t1, 32($sp)
@@ -1730,119 +1779,134 @@ update_pill_structure:
 # How gravity is going to work is we go thorugh each row from the bottom to the top
 # What, we check is if the values below are falling or non there. If they are falling or not there, the pill falls.
 gravity:
-    # Stack pointer allocation
     addi $sp, $sp, -4
-    sw $ra, 0 ( $sp )
+    sw $ra, 0($sp)
+
+    # Decrement gravity counter
+    lw $t0, GRAVITY_COUNTER
+    addi $t0, $t0, -1
+    sw $t0, GRAVITY_COUNTER
+    
+    # Only apply gravity if counter reaches 0
+    bgtz $t0, gravity_done
+    
+    # Reset counter with current speed level
+    lw $t1, GRAVITY_SPEED       # Get level index (0-2)
+    sll $t1, $t1, 2             # Multiply by 4 (word size)
+    la $t2, GRAVITY_SPEEDS
+    add $t2, $t2, $t1           # Get address of current speed
+    lw $t2, 0($t2)              # Load actual delay value
+    sw $t2, GRAVITY_COUNTER     # Reset counter
+
 gravity_start_loop:
-    add $t9, $zero $zero # This records whether we have move a specfic element down
-    
-    li $t0, 7288 # This acts as the i on the board
-    gravity_outer_loop:
-        blt $t0, 1912, gravity_end_loop
-        li $t1, 0 # This acts as the j on the board
-        gravity_inner_loop:
-            bge $t1, 60, gravity_next_i
-    
-            add $t2, $t1, $t0 # Holds i + j
-            add $t3, $t2, $s0 # Adds offset for the main page. This is the first pill to check
-            
-            # We first want to check if this place is even a wall or not. Basically, if it has value 2 or 0, it should not do anything
-            jal store_registers
-            addi $a0, $t3, 0
-            jal get_board_by_addr
-            jal restore_registers
-            
-            
-            beq $v0, 2, gravity_finish_inner_loop # Virus meaning we don't check
-            beq $v0, 0, gravity_finish_inner_loop # Empty space meaning we don't check
-            addi $t4, $v0, 0 # Pill 2 to check 
+    add $t9, $zero, $zero        # Movement flag
 
-            addi $t5, $t4, 256
-            addi $t6, $t3, 256 # Check the location bellow them
-            # Check if empty space for first location or if it's the pill
-            jal store_registers
-            addi $a0, $t5 0
-            jal get_board_by_addr
-            jal restore_registers
-            
-            
-            beq $v0, 0, gravity_check_second
-            beq $v0, $t4, gravity_check_second
-            j gravity_finish_inner_loop
-            gravity_check_second:
-                # Check if empty space for second location or if it's the earlier pill
-                jal store_registers
-                addi $a0, $t6 0
-                jal get_board_by_addr # Get value there
-                jal restore_registers
-                
-                beq $v0, 0, gravity_move_down # Check if it's empty space
-                beq $v0, $t3, gravity_move_down # Check if this is pill 2 with pill 1 beloow it
-                j gravity_finish_inner_loop
-                gravity_move_down:
-                    # Indicate that a movement has changed
-                    addi $t9, $t9, 1
-                
-                    # Load color for $t3
-                    lw $t7, 0( $t3 )
-                    lw $t8, 0( $t4 )
-                    sw $t7, 0( $t6 )
-                    sw $t8, 0 ( $t5 )
-                    # Override earlier color
-                    la $t2, colors
-                    sw $t2, 0( $t3 )
-                    sw $t2, 0( $t4 )
-                    # Update the board for the new pill structure
-                    # First set the new pills structure below
-                    jal store_registers
-                    addi $a0, $t6, 0
-                    add $a1, $t5, $zero
-                    jal set_board_by_addr
-                    jal restore_registers
-                    
-                    jal store_registers
-                    addi $a0, $t5, 0
-                    add $a1, $t6, $zero
-                    jal set_board_by_addr
-                    jal restore_registers
-                    # Second, update the earlier pills area to be empty
-                    jal store_registers
-                    addi $a0, $t3, 0
-                    add $a1, $zero, $zero
-                    jal set_board_by_addr
-                    jal restore_registers
-                    
-                    jal store_registers
-                    addi $a0, $t4, 0
-                    add $a1, $zero, $zero
-                    jal set_board_by_addr
-                    jal restore_registers
-                    
-            gravity_finish_inner_loop:
-            
-            addi $t1, $t1, 4
-            j gravity_inner_loop
-        gravity_next_i:
-            addi $t0, $t0, -256
-            j gravity_outer_loop
-
-    gravity_end_loop:
+    li $t0, 7288                 # Starting position (i)
+gravity_outer_loop:
+    blt $t0, 1912, gravity_end_loop
+    li $t1, 0                    # j counter
     
-    # Check if something has moved
-    beq $t9, 0, gravity_finish
-        # If something has changed, wait a half a second
-        li $v0, 32
-        li $a0, 500
-        syscall
-        jal evaluate_board
-        j gravity_start_loop
+gravity_inner_loop:
+    bge $t1, 60, gravity_next_i
     
-    gravity_finish:
+    add $t2, $t1, $t0            # i + j
+    add $t3, $t2, $s0            # First pill address
+    
+    # Check board value
+    jal store_registers
+    addi $a0, $t3, 0
+    jal get_board_by_addr
+    jal restore_registers
+    
+    beq $v0, 2, gravity_finish_inner_loop  # Skip viruses
+    beq $v0, 0, gravity_finish_inner_loop  # Skip empty spaces
+    addi $t4, $v0, 0             # Pill 2 to check
+    
+    addi $t5, $t4, 256
+    addi $t6, $t3, 256           # Location below
+    
+    # Check space below first location
+    jal store_registers
+    addi $a0, $t5, 0
+    jal get_board_by_addr
+    jal restore_registers
+    
+    beq $v0, 0, gravity_check_second
+    beq $v0, $t4, gravity_check_second
+    j gravity_finish_inner_loop
+    
+gravity_check_second:
+    # Check space below second location
+    jal store_registers
+    addi $a0, $t6, 0
+    jal get_board_by_addr
+    jal restore_registers
+    
+    beq $v0, 0, gravity_move_down
+    beq $v0, $t3, gravity_move_down
+    j gravity_finish_inner_loop
+    
+gravity_move_down:
+    addi $t9, $t9, 1             # Set movement flag
+    
+    # Move pills down
+    lw $t7, 0($t3)
+    lw $t8, 0($t4)
+    sw $t7, 0($t6)
+    sw $t8, 0($t5)
+    
+    # Clear old positions
+    la $t2, colors
+    lw $t2, 12($t2)              # Load black color
+    sw $t2, 0($t3)
+    sw $t2, 0($t4)
+    
+    # Update board state
+    jal store_registers
+    addi $a0, $t6, 0
+    add $a1, $t5, $zero
+    jal set_board_by_addr
+    jal restore_registers
+    
+    jal store_registers
+    addi $a0, $t5, 0
+    add $a1, $t6, $zero
+    jal set_board_by_addr
+    jal restore_registers
+    
+    jal store_registers
+    addi $a0, $t3, 0
+    add $a1, $zero, $zero
+    jal set_board_by_addr
+    jal restore_registers
+    
+    jal store_registers
+    addi $a0, $t4, 0
+    add $a1, $zero, $zero
+    jal set_board_by_addr
+    jal restore_registers
+    
+gravity_finish_inner_loop:
+    addi $t1, $t1, 4
+    j gravity_inner_loop
+    
+gravity_next_i:
+    addi $t0, $t0, -256
+    j gravity_outer_loop
 
-    lw $ra, 0 ( $sp )
+gravity_end_loop:
+    # If something moved, evaluate board and delay
+    beq $t9, 0, gravity_done
+    li $v0, 32
+    li $a0, 500                  # Movement delay (constant)
+    syscall
+    jal evaluate_board
+    j gravity_start_loop
+
+gravity_done:
+    lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
-
 
 # Testing
 add  $a0, $t3, $zero
