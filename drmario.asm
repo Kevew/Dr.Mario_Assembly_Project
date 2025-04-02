@@ -784,20 +784,15 @@ play_beep:
     # Play a short beep sound
     addi $sp, $sp, -4
     sw $ra, 0($sp)            # Save return address
-    jal store_registers
     
-    li $v0, 31 
-    la $t0, beep_pitch
-    la $t1, beep_duration 
-    la $t2, beep_instrument
-    la $t3, beep_volume 
-    move $a0, $t0 
-    move $a1, $t1 
-    move $a2, $t2
-    move $a3, $t3 
+    # Load beep parameters directly
+    li $v0, 31                # MIDI out syscall
+    lb $a0, beep_pitch        # Load pitch (69)
+    lb $a1, beep_duration     # Load duration (100)
+    lb $a2, beep_instrument   # Load instrument (58)
+    lb $a3, beep_volume       # Load volume (100)
     syscall
     
-    jal restore_registers
     lw $ra, 0($sp)            # Restore return address
     addi $sp, $sp, 4
     jr $ra
